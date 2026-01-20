@@ -11,9 +11,9 @@ from app.database import SessionLocal, get_db
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
-# Use argon2 only (no bcrypt to avoid compatibility issues)
+# Support both argon2 and bcrypt for backward compatibility
 pwd_context = CryptContext(
-    schemes=["argon2"],
+    schemes=["argon2", "bcrypt"],
     deprecated="auto"
 )
 
