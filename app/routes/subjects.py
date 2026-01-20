@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.models.models import Subject, User, Assignment
-from app.utils.auth import get_current_user, get_db
+from app.utils.auth import get_current_user
+from app.database import get_db
 from pydantic import BaseModel
 
 class SubjectCreate(BaseModel):
@@ -14,6 +15,21 @@ class SubjectResponse(BaseModel):
     name: str
     code: str
     department_id: int
+    
+    class Config:
+        from_attributes = True
+
+class AssignmentCreate(BaseModel):
+    teacher_id: int
+    subject_id: int
+
+class AssignmentResponse(BaseModel):
+    id: int
+    teacher_id: int
+    subject_id: int
+    
+    class Config:
+        from_attributes = True
 
 router = APIRouter()
 
@@ -27,10 +43,22 @@ def create_subject(subject: SubjectCreate, db: Session = Depends(get_db), curren
     db.refresh(db_subject)
     return db_subject
 
+@router.get("/my", response_model=list[SubjectResponse])
+def read_my_subjects(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    subjects = db.query(Subject).join(Assignment).filter(Assignment.teacher_id == current_user.id).all()
+    return subjects
+
 @router.get("/", response_model=list[SubjectResponse])
 def read_subjects(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    subjects = db.query(Subject).offset(skip).limit(limit).all()
+    subjects = db.query(Subject).order_by(Subject.id).offset(skip).limit(limit).all()
     return subjects
+
+@router.get("/{subject_id}", response_model=SubjectResponse)
+def read_subject(subject_id: int, db: Session = Depends(get_db)):
+    subject = db.query(Subject).filter(Subject.id == subject_id).first()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    return subject
 
 @router.put("/{subject_id}", response_model=SubjectResponse)
 def update_subject(subject_id: int, subject: SubjectCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -56,7 +84,7 @@ def delete_subject(subject_id: int, db: Session = Depends(get_db), current_user:
         raise HTTPException(status_code=404, detail="Subject not found")
 
     # Check for dependencies that would prevent deletion
-    from app.models.models import Assignment, Syllabus
+    from app.models.models import Syllabus
 
     # Check if subject has assignments
     assignments_count = db.query(Assignment).filter(Assignment.subject_id == subject_id).count()
@@ -87,16 +115,14 @@ def read_my_subjects(db: Session = Depends(get_db), current_user: User = Depends
     subjects = db.query(Subject).join(Assignment).filter(Assignment.teacher_id == current_user.id).all()
     return subjects
 
-class AssignmentCreate(BaseModel):
-    teacher_id: int
-    subject_id: int
-
-@router.post("/assign", response_model=AssignmentCreate)
+@router.post("/assign", response_model=AssignmentResponse)
 def assign_subject(assignment: AssignmentCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized")
     db_assignment = Assignment(teacher_id=assignment.teacher_id, subject_id=assignment.subject_id)
     db.add(db_assignment)
     db.commit()
+    db.refresh(db_assignment)
+    return db_assignment
     db.refresh(db_assignment)
     return assignment

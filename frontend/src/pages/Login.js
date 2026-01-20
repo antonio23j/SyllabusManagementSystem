@@ -48,17 +48,27 @@ const Login = () => {
 
     try {
       const response = await api.post('/auth/login', { email, password });
+      console.log('Login response:', response.data);
+      
       localStorage.setItem('token', response.data.access_token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
-      if (response.data.user.role === 'admin') {
-        navigate('/admin');
-      } else if (response.data.user.role === 'teacher') {
-        navigate('/teacher');
-      } else if (response.data.user.role === 'head') {
-        navigate('/head');
+      
+      // Redirect based on role
+      const userRole = response.data.user?.role;
+      console.log('User role:', userRole);
+      
+      if (userRole === 'admin') {
+        navigate('/admin', { replace: true });
+      } else if (userRole === 'teacher') {
+        navigate('/teacher', { replace: true });
+      } else if (userRole === 'head') {
+        navigate('/head', { replace: true });
+      } else {
+        setError('Unknown user role. Please contact administrator.');
       }
     } catch (error) {
-      setError('Invalid email or password. Please try again.');
+      console.error('Login error:', error);
+      setError(error.response?.data?.detail || 'Invalid email or password. Please try again.');
     } finally {
       setLoading(false);
     }

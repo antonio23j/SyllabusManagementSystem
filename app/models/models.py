@@ -6,9 +6,9 @@ from app.database import Base
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True)
-    password_hash = Column(String)
-    role = Column(String)  # admin, teacher, head
+    email = Column(String(255), unique=True, index=True)
+    password_hash = Column(String(255))
+    role = Column(String(50))  # admin, teacher, head
     department_id = Column(Integer, ForeignKey("departments.id"))
 
     department = relationship("Department", back_populates="users", foreign_keys=[department_id])
@@ -16,7 +16,7 @@ class User(Base):
 class Department(Base):
     __tablename__ = "departments"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True)
+    name = Column(String(255), unique=True)
     head_id = Column(Integer, ForeignKey("users.id"))
 
     users = relationship("User", back_populates="department", foreign_keys=[User.department_id])
@@ -26,8 +26,8 @@ class Department(Base):
 class Subject(Base):
     __tablename__ = "subjects"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String)
-    code = Column(String, unique=True)
+    name = Column(String(255))
+    code = Column(String(100), unique=True)
     department_id = Column(Integer, ForeignKey("departments.id"))
 
     department = relationship("Department", back_populates="subjects")
@@ -49,9 +49,9 @@ class Syllabus(Base):
     subject_id = Column(Integer, ForeignKey("subjects.id"))
     teacher_id = Column(Integer, ForeignKey("users.id"))
     template_data = Column(JSON)
-    status = Column(String, default="draft")  # draft, pending, approved
+    status = Column(String(50), default="draft")  # draft, pending, approved
     version = Column(Integer, default=1)
-    google_drive_id = Column(String, nullable=True)
+    google_drive_id = Column(String(500), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

@@ -69,8 +69,8 @@ const HeadDashboard = () => {
     setLoading(true);
     try {
       const [pendingRes, allRes] = await Promise.all([
-        api.get('/syllabi/pending'),
-        api.get('/syllabi/all'),
+        api.get('/syllabi/pending', { params: { skip: 0, limit: 1000 } }),
+        api.get('/syllabi/all', { params: { skip: 0, limit: 1000 } }),
       ]);
       setSyllabi(pendingRes.data);
       setAllSyllabi(allRes.data);

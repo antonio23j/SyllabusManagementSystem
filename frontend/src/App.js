@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import TeacherDashboard from './pages/TeacherDashboard';
 import HeadDashboard from './pages/HeadDashboard';
+import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
 // Create context for color mode toggle
@@ -49,9 +50,9 @@ function App() {
         <Router>
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/admin" element={<AdminDashboard />} />
-            <Route path="/teacher" element={<TeacherDashboard />} />
-            <Route path="/head" element={<HeadDashboard />} />
+            <Route path="/admin" element={<ProtectedRoute element={<AdminDashboard />} requiredRole="admin" />} />
+            <Route path="/teacher" element={<ProtectedRoute element={<TeacherDashboard />} requiredRole="teacher" />} />
+            <Route path="/head" element={<ProtectedRoute element={<HeadDashboard />} requiredRole="head" />} />
             <Route path="/" element={<Login />} />
           </Routes>
         </Router>

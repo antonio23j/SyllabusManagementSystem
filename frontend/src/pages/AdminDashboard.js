@@ -89,7 +89,7 @@ const AdminDashboard = () => {
 
   const fetchUsers = async () => {
     try {
-      const response = await api.get('/users');
+      const response = await api.get('/users/', { params: { skip: 0, limit: 1000 } });
       setUsers(response.data);
     } catch (error) {
       if (error.response?.status === 401) {
@@ -103,7 +103,7 @@ const AdminDashboard = () => {
 
   const fetchDepartments = async () => {
     try {
-      const response = await api.get('/departments');
+      const response = await api.get('/departments/', { params: { skip: 0, limit: 1000 } });
       setDepartments(response.data);
     } catch (error) {
       if (error.response?.status === 401) {
@@ -117,7 +117,7 @@ const AdminDashboard = () => {
 
   const fetchSubjects = async () => {
     try {
-      const response = await api.get('/subjects');
+      const response = await api.get('/subjects/', { params: { skip: 0, limit: 1000 } });
       setSubjects(response.data);
     } catch (error) {
       if (error.response?.status === 401) {
@@ -131,7 +131,7 @@ const AdminDashboard = () => {
 
   const fetchSyllabi = async () => {
     try {
-      const response = await api.get('/syllabi/all');
+      const response = await api.get('/syllabi/all', { params: { skip: 0, limit: 1000 } });
       setSyllabi(response.data);
     } catch (error) {
       if (error.response?.status === 401) {
@@ -1190,12 +1190,36 @@ const AdminDashboard = () => {
         </DialogActions>
       </Dialog>
 
-      {showTemplate && (
-        <SyllabusTemplate
-          syllabus={selectedSyllabus}
-          onClose={handleCloseTemplate}
-        />
-      )}
+      <Dialog
+        open={showTemplate}
+        onClose={handleCloseTemplate}
+        maxWidth="xl"
+        fullWidth
+        fullScreen
+      >
+        <DialogTitle sx={{
+          bgcolor: alpha(theme.palette.primary.main, 0.08),
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+        }}>
+          Syllabus Template
+          <Button
+            onClick={handleCloseTemplate}
+            sx={{ position: 'absolute', right: 8, top: 8 }}
+          >
+            Close
+          </Button>
+        </DialogTitle>
+        <DialogContent sx={{ p: 0 }}>
+          {selectedSyllabus && (
+            <SyllabusTemplate
+              syllabus={selectedSyllabus}
+              onClose={handleCloseTemplate}
+              mode="view"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 };

@@ -39,12 +39,12 @@ const TeacherDashboard = () => {
   }, []);
 
   const fetchSubjects = async () => {
-    const response = await api.get('/subjects/my');
+    const response = await api.get('/subjects/my', { params: { skip: 0, limit: 1000 } });
     setSubjects(response.data);
   };
 
   const fetchSyllabi = async () => {
-    const response = await api.get('/syllabi/my');
+    const response = await api.get('/syllabi/my', { params: { skip: 0, limit: 1000 } });
     setSyllabi(response.data);
   };
 
@@ -344,6 +344,7 @@ const TeacherDashboard = () => {
                         variant="outlined"
                         size="small"
                         onClick={() => {
+                          console.log('View Template clicked for:', syllabus);
                           setSelectedSyllabus(syllabus);
                           setOpenViewTemplate(true);
                         }}

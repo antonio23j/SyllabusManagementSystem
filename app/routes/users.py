@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.models.models import User
-from app.utils.auth import get_current_user, get_db, get_password_hash
+from app.utils.auth import get_current_user, get_password_hash
+from app.database import get_db
 from pydantic import BaseModel
 from typing import Optional
 
@@ -9,19 +10,22 @@ class UserCreate(BaseModel):
     email: str
     password: str
     role: str
-    department_id: int
+    department_id: Optional[int] = None
 
 class UserUpdate(BaseModel):
     email: str
     password: Optional[str] = None
     role: str
-    department_id: int
+    department_id: Optional[int] = None
 
 class UserResponse(BaseModel):
     id: int
     email: str
     role: str
-    department_id: int
+    department_id: Optional[int] = None
+    
+    class Config:
+        from_attributes = True
 
 router = APIRouter()
 
@@ -36,11 +40,21 @@ def create_user(user: UserCreate, db: Session = Depends(get_db), current_user: U
     db.refresh(db_user)
     return db_user
 
+@router.get("/{user_id}", response_model=UserResponse)
+def read_user(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    # Only admin or the user themselves can view details
+    if current_user.role != "admin" and current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return db_user
+
 @router.get("/", response_model=list[UserResponse])
 def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized")
-    users = db.query(User).offset(skip).limit(limit).all()
+    users = db.query(User).order_by(User.id).offset(skip).limit(limit).all()
     return users
 
 @router.put("/{user_id}", response_model=UserResponse)

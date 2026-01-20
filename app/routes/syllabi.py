@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.models.models import Syllabus, User
-from app.utils.auth import get_current_user, get_db
+from app.utils.auth import get_current_user
+from app.database import get_db
 from pydantic import BaseModel
 from typing import Optional
 from reportlab.pdfgen import canvas
@@ -32,6 +33,9 @@ class SyllabusResponse(BaseModel):
     template_data: dict
     status: str
     version: int
+    
+    class Config:
+        from_attributes = True
 
 router = APIRouter()
 
@@ -62,48 +66,91 @@ def create_syllabus(syllabus: SyllabusCreate, db: Session = Depends(get_db), cur
     db.refresh(db_syllabus)
     return db_syllabus
 
-@router.get("/my", response_model=list[SyllabusResponse])
-def read_my_syllabi(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    syllabi = db.query(Syllabus).filter(Syllabus.teacher_id == current_user.id).all()
-    return syllabi
-
-@router.get("/pending", response_model=list[SyllabusResponse])
-def read_pending_syllabi(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if current_user.role != "head":
-        raise HTTPException(status_code=403, detail="Not authorized")
-    from app.models.models import Department
-    dept = db.query(Department).filter(Department.head_id == current_user.id).first()
-    if not dept:
-        raise HTTPException(status_code=404, detail="No department found")
-    syllabi = db.query(Syllabus).join(Syllabus.subject).filter(Syllabus.status == "pending", Syllabus.subject.has(department_id=dept.id)).all()
-    return syllabi
-
-# Admin-only routes
+# SPECIFIC ROUTES - MUST COME BEFORE GENERIC /{syllabus_id} ROUTE
 @router.get("/all", response_model=list[SyllabusResponse])
 def read_all_syllabi(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized")
-    syllabi = db.query(Syllabus).offset(skip).limit(limit).all()
+    syllabi = db.query(Syllabus).order_by(Syllabus.id).offset(skip).limit(limit).all()
     return syllabi
 
-@router.put("/{syllabus_id}/status")
-def update_status(syllabus_id: int, status: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if current_user.role != "head":
+@router.get("/my", response_model=list[SyllabusResponse])
+def read_my_syllabi(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    syllabi = db.query(Syllabus).filter(Syllabus.teacher_id == current_user.id).order_by(Syllabus.id).offset(skip).limit(limit).all()
+    return syllabi
+
+@router.get("/pending", response_model=list[SyllabusResponse])
+def read_pending_syllabi(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if current_user.role not in ["head", "admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
+    
+    from app.models.models import Department
+    
+    if current_user.role == "head":
+        dept = db.query(Department).filter(Department.head_id == current_user.id).first()
+        if not dept:
+            raise HTTPException(status_code=404, detail="No department found")
+        syllabi = db.query(Syllabus).join(Syllabus.subject).filter(
+            Syllabus.status == "pending", 
+            Syllabus.subject.has(department_id=dept.id)
+        ).order_by(Syllabus.id).offset(skip).limit(limit).all()
+    else:  # admin sees all pending
+        syllabi = db.query(Syllabus).filter(Syllabus.status == "pending").order_by(Syllabus.id).offset(skip).limit(limit).all()
+    
+    return syllabi
+
+# GENERIC ROUTES - COME AFTER SPECIFIC ONES
+@router.get("/{syllabus_id}", response_model=SyllabusResponse)
+def read_syllabus(syllabus_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     syllabus = db.query(Syllabus).filter(Syllabus.id == syllabus_id).first()
     if not syllabus:
         raise HTTPException(status_code=404, detail="Syllabus not found")
+    
+    # Authorization: teacher, admin, or department head can view
+    if current_user.role not in ["admin"]:
+        if current_user.role == "teacher" and syllabus.teacher_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        elif current_user.role == "head":
+            from app.models.models import Department
+            dept = db.query(Department).filter(Department.head_id == current_user.id).first()
+            if not dept or syllabus.subject.department_id != dept.id:
+                raise HTTPException(status_code=403, detail="Not authorized")
+    
+    return syllabus
+
+@router.put("/{syllabus_id}/status")
+def update_status(syllabus_id: int, status: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if current_user.role not in ["head", "admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    syllabus = db.query(Syllabus).filter(Syllabus.id == syllabus_id).first()
+    if not syllabus:
+        raise HTTPException(status_code=404, detail="Syllabus not found")
+    
+    # Only heads can approve their department's syllabi, admins can do anything
+    if current_user.role == "head":
+        from app.models.models import Department
+        dept = db.query(Department).filter(Department.head_id == current_user.id).first()
+        if not dept or syllabus.subject.department_id != dept.id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+    
     syllabus.status = status
     db.commit()
-    return {"message": "Status updated"}
+    db.refresh(syllabus)
+    return {"message": "Status updated", "syllabus": syllabus}
 
 @router.put("/{syllabus_id}", response_model=SyllabusResponse)
 def update_syllabus(syllabus_id: int, syllabus: SyllabusUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if current_user.role != "admin":
+    if current_user.role not in ["admin", "teacher"]:
         raise HTTPException(status_code=403, detail="Not authorized")
+    
     db_syllabus = db.query(Syllabus).filter(Syllabus.id == syllabus_id).first()
     if not db_syllabus:
         raise HTTPException(status_code=404, detail="Syllabus not found")
+    
+    # Teachers can only update their own syllabi
+    if current_user.role == "teacher" and db_syllabus.teacher_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
 
     # Update only provided fields
     if syllabus.subject_id is not None:

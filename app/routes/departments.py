@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.models.models import Department, User
-from app.utils.auth import get_current_user, get_db
+from app.utils.auth import get_current_user
+from app.database import get_db
 from pydantic import BaseModel
 from typing import Optional
 
@@ -13,6 +14,9 @@ class DepartmentResponse(BaseModel):
     id: int
     name: str
     head_id: Optional[int] = None
+    
+    class Config:
+        from_attributes = True
 
 router = APIRouter()
 
@@ -26,9 +30,16 @@ def create_department(dept: DepartmentCreate, db: Session = Depends(get_db), cur
     db.refresh(db_dept)
     return db_dept
 
+@router.get("/{dept_id}", response_model=DepartmentResponse)
+def read_department(dept_id: int, db: Session = Depends(get_db)):
+    dept = db.query(Department).filter(Department.id == dept_id).first()
+    if not dept:
+        raise HTTPException(status_code=404, detail="Department not found")
+    return dept
+
 @router.get("/", response_model=list[DepartmentResponse])
 def read_departments(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    depts = db.query(Department).offset(skip).limit(limit).all()
+    depts = db.query(Department).order_by(Department.id).offset(skip).limit(limit).all()
     return depts
 
 @router.put("/{dept_id}", response_model=DepartmentResponse)
