@@ -20,8 +20,14 @@ try:
     # Check if admin already exists
     existing_admin = db.query(User).filter(User.role == "admin").first()
     if existing_admin:
+        # Ensure the admin password hash is using the current hashing scheme
+        admin_password = "admin123"
+        existing_admin.password_hash = get_password_hash(admin_password)
+        db.commit()
+        db.refresh(existing_admin)
+
         print(f"Admin user already exists: {existing_admin.email}")
-        print("To login, use:")
+        print("Password has been reset to the default:")
         print(f"Email: {existing_admin.email}")
         print("Password: admin123")
     else:

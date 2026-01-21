@@ -4,7 +4,7 @@ import {
   List, ListItem, ListItemText, TextField, Box, Select, MenuItem,
   FormControl, InputLabel, Grid, Dialog, DialogTitle, DialogContent,
   DialogActions, Chip, Avatar, Accordion, AccordionSummary, AccordionDetails,
-  IconButton, Paper
+  IconButton, Paper, CircularProgress
 } from '@mui/material';
 import { useForm, Controller } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
@@ -31,6 +31,7 @@ const TeacherDashboard = () => {
   const [openVersion, setOpenVersion] = useState(false);
   const [openTemplate, setOpenTemplate] = useState(false);
   const [openViewTemplate, setOpenViewTemplate] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const { control, handleSubmit, reset } = useForm();
 
   useEffect(() => {
@@ -67,13 +68,15 @@ const TeacherDashboard = () => {
     };
 
     try {
-      await api.post('/syllabi', syllabusData);
+      // use trailing slash to avoid backend redirect which can drop auth headers
+      await api.post('/syllabi/', syllabusData);
       alert('Syllabus created successfully');
       setOpenTemplate(false);
       fetchSyllabi();
     } catch (error) {
       console.error('Error creating syllabus:', error);
-      alert('Error creating syllabus');
+      const serverMsg = error?.response?.data?.detail || error?.response?.data || error.message;
+      alert(`Error creating syllabus: ${serverMsg}`);
     }
   };
 
@@ -83,11 +86,17 @@ const TeacherDashboard = () => {
       template_data: data,
       status: 'draft'
     };
-    await api.post('/syllabi', versionData);
-    alert('New syllabus version created successfully');
-    reset();
-    setOpenVersion(false);
-    fetchSyllabi();
+    try {
+      await api.post('/syllabi/', versionData);
+      alert('New syllabus version created successfully');
+      reset();
+      setOpenVersion(false);
+      fetchSyllabi();
+    } catch (error) {
+      console.error('Error creating syllabus version:', error);
+      const serverMsg = error?.response?.data?.detail || error?.response?.data || error.message;
+      alert(`Error creating version: ${serverMsg}`);
+    }
   };
 
   return (
@@ -131,7 +140,7 @@ const TeacherDashboard = () => {
                   Teacher Dashboard
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Manage your syllabi and course content
+                  Manage your syllabus and course content
                 </Typography>
               </Box>
             </Box>
@@ -224,14 +233,14 @@ const TeacherDashboard = () => {
                   </Typography>
                 </Box>
                 <Typography variant="h6" gutterBottom>
-                  My Syllabi
+                  My Syllabus
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Syllabi you've created
+                  Syllabus you've created
                 </Typography>
-                {syllabi.length === 0 ? (
+                  {syllabi.length === 0 ? (
                   <Typography variant="body2" color="text.secondary">
-                    No syllabi created yet
+                    No syllabus created yet
                   </Typography>
                 ) : (
                   <List dense sx={{ maxHeight: 100, overflow: 'auto' }}>
@@ -356,13 +365,18 @@ const TeacherDashboard = () => {
                         size="small"
                         color="primary"
                         onClick={() => {
+                          // preserve existing behavior, but show visual feedback
                           setSelectedSyllabus(syllabus);
+                          setDownloading(true);
                           setOpenViewTemplate(true);
+                          // short visual feedback without changing logic
+                          setTimeout(() => setDownloading(false), 900);
                         }}
                         startIcon={<PictureAsPdf />}
                         sx={{ borderRadius: 2 }}
+                        disabled={downloading}
                       >
-                        Download PDF
+                        {downloading ? <CircularProgress size={18} color="inherit" /> : 'Download PDF'}
                       </Button>
                       <Button
                         variant="outlined"

@@ -170,7 +170,7 @@ syllabus-management/
 - `PUT /subjects/{id}` - Update subject
 - `DELETE /subjects/{id}` - Delete subject
 
-### Syllabi
+### Syllabus
 - `GET /syllabi` - List syllabi
 - `POST /syllabi` - Create syllabus
 - `GET /syllabi/{id}` - Get syllabus details

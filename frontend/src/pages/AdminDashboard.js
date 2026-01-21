@@ -30,6 +30,7 @@ import {
   SwapHoriz,
   DarkMode,
   LightMode,
+  Refresh,
   People,
   Business,
   MenuBook,
@@ -68,10 +69,16 @@ const AdminDashboard = () => {
   const [newUser, setNewUser] = useState({ email: '', password: '', role: '', department_id: '' });
   const [newDept, setNewDept] = useState({ name: '', head_id: '' });
   const [newSubject, setNewSubject] = useState({ name: '', code: '', department_id: '' });
-  const [newSyllabus, setNewSyllabus] = useState({ subject_id: '', teacher_id: '' });
+  const [newSyllabus, setNewSyllabus] = useState({
+    subject_id: '',
+    teacher_id: '',
+    template_data: {},
+    status: 'draft',
+  });
   const [assignment, setAssignment] = useState({ teacher_id: '', subject_id: '' });
   const [selectedSyllabus, setSelectedSyllabus] = useState(null);
   const [showTemplate, setShowTemplate] = useState(false);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -89,11 +96,12 @@ const AdminDashboard = () => {
 
   const fetchUsers = async () => {
     try {
-      const response = await api.get('/users');
+      // Avoid FastAPI's 307 redirect (/users -> /users/) which can drop auth headers
+      const response = await api.get('/users/');
       setUsers(response.data);
     } catch (error) {
       if (error.response?.status === 401) {
-        alert('Session expired. Please login again.');
+        console.warn('Session expired while fetching users. Please login again.', error);
         navigate('/login');
       } else {
         console.error('Failed to fetch users:', error);
@@ -101,13 +109,21 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleRefresh = () => {
+    fetchUsers();
+    fetchDepartments();
+    fetchSubjects();
+    fetchSyllabi();
+  };
+
   const fetchDepartments = async () => {
     try {
-      const response = await api.get('/departments');
+      // Avoid FastAPI's 307 redirect (/departments -> /departments/) which can drop auth headers
+      const response = await api.get('/departments/');
       setDepartments(response.data);
     } catch (error) {
       if (error.response?.status === 401) {
-        alert('Session expired. Please login again.');
+        console.warn('Session expired while fetching departments. Please login again.', error);
         navigate('/login');
       } else {
         console.error('Failed to fetch departments:', error);
@@ -117,11 +133,12 @@ const AdminDashboard = () => {
 
   const fetchSubjects = async () => {
     try {
-      const response = await api.get('/subjects');
+      // Avoid FastAPI's 307 redirect (/subjects -> /subjects/) which can drop auth headers
+      const response = await api.get('/subjects/');
       setSubjects(response.data);
     } catch (error) {
       if (error.response?.status === 401) {
-        alert('Session expired. Please login again.');
+        console.warn('Session expired while fetching subjects. Please login again.', error);
         navigate('/login');
       } else {
         console.error('Failed to fetch subjects:', error);
@@ -135,7 +152,7 @@ const AdminDashboard = () => {
       setSyllabi(response.data);
     } catch (error) {
       if (error.response?.status === 401) {
-        alert('Session expired. Please login again.');
+        console.warn('Session expired while fetching syllabi. Please login again.', error);
         navigate('/login');
       } else {
         console.error('Failed to fetch syllabi:', error);
@@ -215,7 +232,8 @@ const AdminDashboard = () => {
         alert('User updated successfully!');
       } else {
         userData.password = newUser.password;
-        await api.post('/users', userData);
+        // Avoid FastAPI's 307 redirect (/users -> /users/) which can drop auth headers
+        await api.post('/users/', userData);
         alert('User created successfully!');
       }
 
@@ -224,7 +242,7 @@ const AdminDashboard = () => {
       fetchUsers();
     } catch (error) {
       if (error.response?.status === 401) {
-        alert('Session expired. Please login again.');
+        console.warn('Session expired while saving user. Please login again.', error);
         navigate('/login');
       } else if (error.response?.status === 403) {
         alert('Access denied. Admin privileges required.');
@@ -260,7 +278,7 @@ const AdminDashboard = () => {
       fetchDepartments();
     } catch (error) {
       if (error.response?.status === 401) {
-        alert('Session expired. Please login again.');
+        console.warn('Session expired while saving department. Please login again.', error);
         navigate('/login');
       } else if (error.response?.status === 403) {
         alert('Access denied. Admin privileges required.');
@@ -297,7 +315,7 @@ const AdminDashboard = () => {
       fetchSubjects();
     } catch (error) {
       if (error.response?.status === 401) {
-        alert('Session expired. Please login again.');
+        console.warn('Session expired while saving subject. Please login again.', error);
         navigate('/login');
       } else if (error.response?.status === 403) {
         alert('Access denied. Admin privileges required.');
@@ -318,7 +336,7 @@ const AdminDashboard = () => {
         subject_id: parseInt(newSyllabus.subject_id),
         teacher_id: parseInt(newSyllabus.teacher_id),
         template_data: newSyllabus.template_data || {},
-        status: newSyllabus.status
+        status: newSyllabus.status || 'draft'
       };
 
       if (editingSyllabus) {
@@ -326,7 +344,8 @@ const AdminDashboard = () => {
         setEditingSyllabus(null);
         alert('Syllabus updated successfully!');
       } else {
-        await api.post('/syllabi', syllabusData);
+        // Avoid FastAPI's 307 redirect (/syllabi -> /syllabi/) which can drop auth headers
+        await api.post('/syllabi/', syllabusData);
         alert('Syllabus created successfully!');
       }
 
@@ -335,7 +354,7 @@ const AdminDashboard = () => {
       fetchSyllabi();
     } catch (error) {
       if (error.response?.status === 401) {
-        alert('Session expired. Please login again.');
+        console.warn('Session expired while saving syllabus. Please login again.', error);
         navigate('/login');
       } else if (error.response?.status === 403) {
         alert('Access denied. Admin privileges required.');
@@ -351,6 +370,9 @@ const AdminDashboard = () => {
         await api.post('/subjects/assign', assignment);
         setAssignment({ teacher_id: '', subject_id: '' });
         alert('Subject assigned successfully!');
+        // Keep dashboard data in sync after assignment
+        fetchSubjects();
+        fetchSyllabi();
       } catch (error) {
         alert(`Failed to assign subject: ${getErrorMessage(error)}`);
       }
@@ -472,13 +494,27 @@ const AdminDashboard = () => {
     py: 1,
     pr: `${actionWidth}px`,
     border: '1px solid',
-    borderColor: alpha(theme.palette[paletteColor].main, 0.15),
-    bgcolor: alpha(theme.palette[paletteColor].main, 0.04),
+    borderColor: alpha(theme.palette[paletteColor].main, 0.12),
+    bgcolor: theme.palette.mode === 'light' ? alpha(theme.palette[paletteColor].main, 0.03) : alpha(theme.palette.common.white, 0.02),
     alignItems: 'center',
+    transition: 'transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease',
     '&:hover': {
-      bgcolor: alpha(theme.palette[paletteColor].main, 0.08),
+      transform: 'translateY(-2px)',
+      boxShadow: theme.shadows[2],
+      borderColor: alpha(theme.palette[paletteColor].main, 0.22),
     },
   });
+
+  // Shared text style for list items to keep alignment consistent across lists
+  const listTextSx = {
+    pr: 2,
+    minWidth: 0,
+    '& .MuiListItemText-primary, & .MuiListItemText-secondary': {
+      whiteSpace: 'normal',
+      wordBreak: 'normal',
+      overflowWrap: 'break-word',
+    },
+  };
 
   const actionButtonSx = {
     bgcolor: alpha(theme.palette.common.black, 0.04),
@@ -496,7 +532,7 @@ const AdminDashboard = () => {
     { title: 'Users', count: users.length, icon: People, color: 'primary', desc: 'Manage system users and roles', action: () => setOpenUser(true), actionLabel: 'Add User' },
     { title: 'Departments', count: departments.length, icon: Business, color: 'secondary', desc: 'Organize academic departments', action: () => setOpenDept(true), actionLabel: 'Add Department' },
     { title: 'Subjects', count: subjects.length, icon: MenuBook, color: 'info', desc: 'Manage course subjects', action: () => setOpenSubject(true), actionLabel: 'Add Subject' },
-    { title: 'Syllabi', count: syllabi.length, icon: Description, color: 'success', desc: 'Course syllabi and templates', action: () => setOpenSyllabus(true), actionLabel: 'Manage Syllabi' },
+    { title: 'Syllabus', count: syllabi.length, icon: Description, color: 'success', desc: 'Course syllabus and templates', action: () => setOpenSyllabus(true), actionLabel: 'Manage Syllabus' },
   ];
 
   return (
@@ -505,8 +541,9 @@ const AdminDashboard = () => {
         minHeight: '100vh',
         bgcolor: 'background.default',
         backgroundImage: theme.palette.mode === 'light'
-          ? 'radial-gradient(circle at top right, rgba(31, 75, 153, 0.12), transparent 55%), radial-gradient(circle at bottom left, rgba(15, 118, 110, 0.1), transparent 50%)'
-          : 'radial-gradient(circle at top right, rgba(99, 165, 255, 0.12), transparent 55%), radial-gradient(circle at bottom left, rgba(79, 209, 197, 0.12), transparent 50%)',
+          ? 'linear-gradient(180deg, rgba(245,248,255,0.6) 0%, rgba(250,251,253,0.4) 50%), radial-gradient(circle at 10% 10%, rgba(31,75,153,0.06), transparent 20%)'
+          : 'linear-gradient(180deg, rgba(6,10,15,0.6) 0%, rgba(12,18,25,0.4) 50%), radial-gradient(circle at 90% 90%, rgba(79,209,197,0.04), transparent 20%)',
+        backgroundBlendMode: 'overlay',
       }}
     >
       <Container maxWidth="lg" sx={{ pt: 4 }}>
@@ -540,22 +577,32 @@ const AdminDashboard = () => {
                   Admin Dashboard
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Manage users, departments, subjects, and syllabi
+                  Manage users, departments, subjects, and syllabus
                 </Typography>
               </Box>
             </Box>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <IconButton onClick={colorMode.toggleColorMode}>
-                {theme.palette.mode === 'dark' ? <LightMode /> : <DarkMode />}
-              </IconButton>
-              <Button
-                variant="outlined"
-                startIcon={<Logout />}
-                onClick={handleLogout}
-              >
-                Logout
-              </Button>
-            </Box>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <TextField
+                  placeholder="Search users, subjects, departments..."
+                  size="small"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  sx={{ width: 300 }}
+                />
+                <IconButton onClick={handleRefresh} title="Refresh">
+                  <Refresh />
+                </IconButton>
+                <IconButton onClick={colorMode.toggleColorMode}>
+                  {theme.palette.mode === 'dark' ? <LightMode /> : <DarkMode />}
+                </IconButton>
+                <Button
+                  variant="outlined"
+                  startIcon={<Logout />}
+                  onClick={handleLogout}
+                >
+                  Logout
+                </Button>
+              </Box>
           </Box>
         </Paper>
       </Container>
@@ -569,7 +616,15 @@ const AdminDashboard = () => {
               <Card
                 sx={{
                   height: '100%',
-                  borderColor: alpha(theme.palette[stat.color].main, 0.2),
+                  borderColor: alpha(theme.palette[stat.color].main, 0.12),
+                  background: theme.palette.mode === 'light'
+                    ? `linear-gradient(135deg, ${alpha(theme.palette[stat.color].light || theme.palette[stat.color].main, 0.06)}, transparent 40%)`
+                    : `linear-gradient(135deg, ${alpha(theme.palette[stat.color].dark || theme.palette[stat.color].main, 0.04)}, transparent 40%)`,
+                  transition: 'transform 150ms ease, box-shadow 150ms ease',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: theme.shadows[6],
+                  },
                 }}
               >
                 <CardContent>
@@ -657,21 +712,21 @@ const AdminDashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Lists Section */}
+        {/* Lists Section - 2x2 grid: Users | Departments (top row), Syllabus | Subjects (bottom row) */}
         <Grid container spacing={3}>
-          {/* Users List */}
+          {/* Row 1 - Users */}
           <Grid item xs={12} md={6}>
-            <Card>
-              <CardContent>
+            <Card sx={{ borderRadius: 3, boxShadow: theme.shadows[2], display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <CardContent sx={{ flex: 1, overflow: 'hidden' }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                   <Typography variant="h6" sx={{ fontWeight: 600 }}>Users</Typography>
                   <Chip label={users.length} size="small" color="primary" />
                 </Box>
-                <List dense sx={{ maxHeight: 320, overflow: 'auto', pr: 0.5 }}>
-                  {users.map(user => (
+                <List dense sx={{ flex: 1, overflow: 'auto', pr: 0.5 }}>
+                  {users.filter(u => !query || u.email.toLowerCase().includes(query.toLowerCase())).map(user => (
                     <ListItem
                       key={user.id}
-                      sx={listItemBaseSx('primary')}
+                      sx={listItemBaseSx('primary', wideActionWidth)}
                       secondaryAction={
                         <Box sx={{ display: 'flex', gap: 1 }}>
                           <Tooltip title="Edit">
@@ -688,12 +743,10 @@ const AdminDashboard = () => {
                       }
                     >
                       <ListItemText
-                        sx={{ pr: 2 }}
+                        sx={listTextSx}
                         primary={
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                              {user.email}
-                            </Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>{user.email}</Typography>
                             <Chip
                               label={user.role}
                               size="small"
@@ -710,19 +763,19 @@ const AdminDashboard = () => {
             </Card>
           </Grid>
 
-          {/* Departments List */}
+          {/* Row 1 - Departments */}
           <Grid item xs={12} md={6}>
-            <Card>
-              <CardContent>
+            <Card sx={{ borderRadius: 3, boxShadow: theme.shadows[2], display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <CardContent sx={{ flex: 1, overflow: 'hidden' }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                   <Typography variant="h6" sx={{ fontWeight: 600 }}>Departments</Typography>
                   <Chip label={departments.length} size="small" color="secondary" />
                 </Box>
-                <List dense sx={{ maxHeight: 320, overflow: 'auto', pr: 0.5 }}>
-                  {departments.map(dept => (
+                <List dense sx={{ flex: 1, overflow: 'auto', pr: 0.5 }}>
+                  {departments.filter(d => !query || d.name.toLowerCase().includes(query.toLowerCase())).map(dept => (
                     <ListItem
                       key={dept.id}
-                      sx={listItemBaseSx('secondary')}
+                      sx={listItemBaseSx('secondary', wideActionWidth)}
                       secondaryAction={
                         <Box sx={{ display: 'flex', gap: 1 }}>
                           <Tooltip title="Edit">
@@ -738,7 +791,22 @@ const AdminDashboard = () => {
                         </Box>
                       }
                     >
-                      <ListItemText sx={{ pr: 2 }} primary={dept.name} />
+                      <ListItemText
+                        sx={listTextSx}
+                        primary={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>{dept.name}</Typography>
+                            {dept.head_id && (
+                              <Chip
+                                label={users.find(u => u.id === dept.head_id)?.email || 'Head'}
+                                size="small"
+                                sx={{ height: 20, fontSize: '0.7rem' }}
+                              />
+                            )}
+                          </Box>
+                        }
+                        secondary={users.find(u => u.id === dept.head_id) ? `Head: ${formatTeacherName(users.find(u => u.id === dept.head_id).email)}` : ''}
+                      />
                     </ListItem>
                   ))}
                 </List>
@@ -746,16 +814,16 @@ const AdminDashboard = () => {
             </Card>
           </Grid>
 
-          {/* Subjects List */}
-          <Grid item xs={12} md={6}>
-            <Card>
-              <CardContent>
+          {/* Row 2 - Subjects (left) */}
+          <Grid item xs={12} md={9}>
+            <Card sx={{ borderRadius: 3, boxShadow: theme.shadows[2], display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <CardContent sx={{ flex: 1, overflow: 'hidden' }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                   <Typography variant="h6" sx={{ fontWeight: 600 }}>Subjects</Typography>
                   <Chip label={subjects.length} size="small" color="info" />
                 </Box>
-                <List dense sx={{ maxHeight: 320, overflow: 'auto', pr: 0.5 }}>
-                  {subjects.map(subject => {
+                <List dense sx={{ flex: 1, overflow: 'auto', pr: 0.5 }}>
+                  {subjects.filter(s => !query || s.name.toLowerCase().includes(query.toLowerCase()) || s.code.toLowerCase().includes(query.toLowerCase())).map(subject => {
                     const assignments = users.filter(user =>
                       user.role === 'teacher' &&
                       syllabi.some(s => s.subject_id === subject.id && s.teacher_id === user.id)
@@ -786,18 +854,14 @@ const AdminDashboard = () => {
                           </Box>
                         }
                       >
-                        <ListItemText
-                          sx={{
-                            pr: 2,
-                            minWidth: 0,
-                            '& .MuiListItemText-primary, & .MuiListItemText-secondary': {
-                              whiteSpace: 'normal',
-                              wordBreak: 'normal',
-                              overflowWrap: 'break-word',
-                            },
-                          }}
-                          primary={subject.name}
-                          secondary={`${subject.code}${assignedTeachers ? ` - ${assignedTeachers}` : ''}`}
+                        <ListItemText sx={listTextSx}
+                          primary={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography variant="body2" sx={{ fontWeight: 500 }}>{subject.name}</Typography>
+                              <Chip label={subject.code} size="small" sx={{ height: 20, fontSize: '0.7rem' }} />
+                            </Box>
+                          }
+                          secondary={assignedTeachers || ''}
                         />
                       </ListItem>
                     );
@@ -807,16 +871,28 @@ const AdminDashboard = () => {
             </Card>
           </Grid>
 
-          {/* Syllabi List */}
-          <Grid item xs={12} md={6}>
-            <Card>
-              <CardContent>
+          {/* Row 2 - Syllabus (right) */}
+          <Grid item xs={12} md={3}>
+            <Card sx={{ borderRadius: 3, boxShadow: theme.shadows[2], display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <CardContent sx={{ flex: 1, overflow: 'hidden' }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>Syllabi</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>Syllabus</Typography>
                   <Chip label={syllabi.length} size="small" color="success" />
                 </Box>
-                <List dense sx={{ maxHeight: 320, overflow: 'auto', pr: 0.5 }}>
-                  {syllabi.map(syllabus => {
+                <List dense sx={{ flex: 1, overflow: 'auto', pr: 0.5 }}>
+                  {syllabi.length === 0 && (
+                    <Box sx={{ py: 2, px: 1 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        No syllabus yet. Create one via the “Manage Syllabus” button above.
+                      </Typography>
+                    </Box>
+                  )}
+                  {syllabi.filter(sy => {
+                    if (!query) return true;
+                    const subject = subjects.find(s => s.id === sy.subject_id);
+                    const teacher = users.find(u => u.id === sy.teacher_id);
+                    return (subject && (subject.name || '').toLowerCase().includes(query.toLowerCase())) || (teacher && (teacher.email || '').toLowerCase().includes(query.toLowerCase()));
+                  }).map(syllabus => {
                     const subject = subjects.find(s => s.id === syllabus.subject_id);
                     const teacher = users.find(u => u.id === syllabus.teacher_id);
                     return (
@@ -846,7 +922,7 @@ const AdminDashboard = () => {
                         <ListItemText
                           sx={{
                             pr: 2,
-                            maxWidth: `calc(100% - ${wideActionWidth}px)`,
+                            minWidth: 0,
                             '& .MuiListItemText-primary, & .MuiListItemText-secondary': {
                               whiteSpace: 'normal',
                               wordBreak: 'normal',
@@ -855,9 +931,7 @@ const AdminDashboard = () => {
                           }}
                           primary={
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                {subject?.name || 'Unknown'} (v{syllabus.version})
-                              </Typography>
+                              <Typography variant="body2" sx={{ fontWeight: 500 }}>{subject?.name || 'Unknown'} (v{syllabus.version})</Typography>
                               <Chip
                                 label={syllabus.status}
                                 size="small"

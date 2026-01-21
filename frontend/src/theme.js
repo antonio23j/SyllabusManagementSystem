@@ -60,14 +60,15 @@ const getComponentOverrides = (mode) => ({
           height: '8px',
         },
         '&::-webkit-scrollbar-track': {
-          background: mode === 'light' ? '#f1f1f1' : '#1a1a2e',
+          // Avoid purple-tinted dark track; keep it neutral/slate
+          background: mode === 'light' ? '#f1f1f1' : '#0f172a',
         },
         '&::-webkit-scrollbar-thumb': {
-          background: mode === 'light' ? '#c1c1c1' : '#4a4a6a',
+          background: mode === 'light' ? '#c1c1c1' : '#334155',
           borderRadius: '4px',
         },
         '&::-webkit-scrollbar-thumb:hover': {
-          background: mode === 'light' ? '#a1a1a1' : '#6a6a8a',
+          background: mode === 'light' ? '#a1a1a1' : '#475569',
         },
       },
     },

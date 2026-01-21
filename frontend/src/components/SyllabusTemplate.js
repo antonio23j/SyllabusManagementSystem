@@ -90,6 +90,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
     if (!templateRef.current) return;
 
     try {
+      // render a high-resolution canvas of the preview
       const canvas = await html2canvas(templateRef.current, {
         scale: 2,
         useCORS: true,
@@ -100,21 +101,74 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
 
-      const imgWidth = 210;
-      const pageHeight = 295;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
+      // set PDF metadata
+      pdf.setProperties({
+        title: templateData.courseTitle || 'Syllabus',
+        subject: templateData.courseCode || '',
+        author: templateData.instructor || '',
+        keywords: 'syllabus, course',
+        creator: 'SyllabusManagementSystem'
+      });
 
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const margin = 12; // mm
+
+      // Cover page
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(22);
+      pdf.text(templateData.courseTitle || 'Course Title', pdfWidth / 2, pdfHeight / 3, { align: 'center' });
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(templateData.courseCode || '', pdfWidth / 2, pdfHeight / 3 + 12, { align: 'center' });
+      pdf.setFontSize(11);
+      pdf.text(`Instructor: ${templateData.instructor || ''}`, pdfWidth / 2, pdfHeight / 3 + 26, { align: 'center' });
+      pdf.text(`Date: ${new Date().toLocaleDateString()}`, pdfWidth / 2, pdfHeight / 3 + 36, { align: 'center' });
+      pdf.addPage();
+
+      // width to place the image into (respect margins)
+      const imgWidth = pdfWidth - margin * 2;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      // usable page height (respect margins for header/footer)
+      const usablePageHeight = pdfHeight - margin * 2;
+
+      let heightLeft = imgHeight;
       let position = 0;
 
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+      // add first content page image (page 2)
+      pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight);
+      heightLeft -= usablePageHeight;
 
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
+      // add following pages if needed
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight + margin;
         pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
+        pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight);
+        heightLeft -= usablePageHeight;
+      }
+
+      // Add clean headers and footers to content pages only
+      const totalPages = pdf.getNumberOfPages();
+      for (let i = 2; i <= totalPages; i++) {
+        pdf.setPage(i);
+        // header: course title centered
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(12);
+        const headerText = templateData.courseTitle || '';
+        if (headerText) pdf.text(headerText, pdfWidth / 2, margin / 2 + 4, { align: 'center' });
+
+        // small course code at top-right
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9);
+        const codeText = templateData.courseCode || '';
+        if (codeText) pdf.text(codeText, pdfWidth - margin, margin / 2 + 4, { align: 'right' });
+
+        // footer: page number + last updated
+        pdf.setFontSize(9);
+        const footerY = pdfHeight - margin / 2;
+        pdf.text(`Page ${i} of ${totalPages}`, pdfWidth / 2, footerY, { align: 'center' });
+        pdf.text(`Last updated: ${new Date().toLocaleDateString()}`, margin, footerY, { align: 'left' });
       }
 
       pdf.save(`syllabus-${templateData.courseCode || 'template'}.pdf`);
@@ -366,31 +420,39 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
             <Box
               ref={templateRef}
               sx={{
-                p: 3,
-                bgcolor: '#ffffff',
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 2,
-                fontFamily: 'Arial, sans-serif',
-                color: '#333',
-                maxWidth: '600px',
-                margin: '0 auto',
-                boxShadow: '0 12px 30px rgba(15, 23, 42, 0.08)',
+                  p: 3,
+                  bgcolor: '#ffffff',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 2,
+                  fontFamily: 'Arial, sans-serif',
+                  color: '#222',
+                  maxWidth: '700px',
+                  margin: '0 auto',
+                  boxShadow: '0 16px 40px rgba(15, 23, 42, 0.12)',
               }}
             >
               {/* Header - Always use print-friendly colors */}
-              <Box sx={{ textAlign: 'center', mb: 3, borderBottom: '2px solid #1565C0', pb: 2 }}>
-                <Typography variant="h4" sx={{ color: '#1565C0', fontWeight: 'bold', mb: 1 }}>
-                  {templateData.courseTitle || 'Course Title'}
-                </Typography>
-                <Typography variant="h6" sx={{ color: '#666' }}>
-                  {templateData.courseCode || 'Course Code'}
-                </Typography>
-              </Box>
+                <Box sx={{ position: 'relative', textAlign: 'center', mb: 3, pb: 2 }}>
+                  <Box sx={{ position: 'absolute', left: 0, right: 0, top: 0, height: 10, background: 'linear-gradient(90deg,#1565C0,#42A5F5)', borderTopLeftRadius: 8, borderTopRightRadius: 8 }} />
+                  <Box sx={{ pt: 2 }} />
+                  <Typography variant="h4" sx={{ color: '#0d47a1', fontWeight: 800, mb: 0.5, fontFamily: 'Georgia, serif' }}>
+                    {templateData.courseTitle || 'Course Title'}
+                  </Typography>
+                  <Typography variant="h6" sx={{ color: '#546e7a', fontWeight: 600 }}>
+                    {templateData.courseCode || 'Course Code'}
+                  </Typography>
+                  {/* code pill top-right */}
+                  <Box sx={{ position: 'absolute', top: 14, right: 12 }}>
+                    <Box sx={{ bgcolor: '#e3f2fd', color: '#0d47a1', px: 1.5, py: 0.4, borderRadius: 1.5, fontWeight: 700, fontSize: '0.8rem', boxShadow: '0 2px 6px rgba(13,71,161,0.08)' }}>
+                      {templateData.courseCode || ''}
+                    </Box>
+                  </Box>
+                </Box>
 
               {/* Instructor Info */}
               <Box sx={{ mb: 3 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#333' }}>
+                <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: '#0d47a1', background: '#f3f7fb', display: 'inline-block', px: 1, borderRadius: 0.5 }}>
                   Instructor Information
                 </Typography>
                 <Typography sx={{ color: '#333' }}>
@@ -409,7 +471,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
               {/* Subject Information */}
               {(templateData.typology || templateData.type) && (
                 <Box sx={{ mb: 3 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#333' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: '#0d47a1', background: '#f3f7fb', display: 'inline-block', px: 1, borderRadius: 0.5 }}>
                     Subject Information
                   </Typography>
                   {templateData.typology && (
@@ -437,7 +499,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
               {/* Course Description */}
               {(templateData.year || templateData.semester || templateData.additionalDescription) && (
                 <Box sx={{ mb: 3 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#333' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: '#0d47a1', background: '#f3f7fb', display: 'inline-block', px: 1, borderRadius: 0.5 }}>
                     Course Description
                   </Typography>
                   <Typography sx={{ lineHeight: 1.6, color: '#333' }}>
@@ -449,7 +511,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
               {/* Learning Objectives */}
               {templateData.learningObjectives && (
                 <Box sx={{ mb: 3 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#333' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: '#0d47a1', background: '#f3f7fb', display: 'inline-block', px: 1, borderRadius: 0.5 }}>
                     Learning Objectives
                   </Typography>
                   <Typography sx={{ lineHeight: 1.6, color: '#333' }}>
@@ -461,7 +523,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
               {/* Prerequisites */}
               {templateData.prerequisites && (
                 <Box sx={{ mb: 3 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#333' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: '#0d47a1', background: '#f3f7fb', display: 'inline-block', px: 1, borderRadius: 0.5 }}>
                     Prerequisites
                   </Typography>
                   <Typography sx={{ color: '#333' }}>{templateData.prerequisites}</Typography>
@@ -470,7 +532,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
 
               {/* Required Materials */}
               <Box sx={{ mb: 3 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#333' }}>
+                <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: '#0d47a1', background: '#f3f7fb', display: 'inline-block', px: 1, borderRadius: 0.5 }}>
                   Required Materials
                 </Typography>
                 <Typography sx={{ lineHeight: 1.6, color: '#333' }}>
@@ -480,7 +542,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
 
               {/* Grading Policy */}
               <Box sx={{ mb: 3 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#333' }}>
+                <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: '#0d47a1', background: '#f3f7fb', display: 'inline-block', px: 1, borderRadius: 0.5 }}>
                   Grading Policy
                 </Typography>
                 <Typography sx={{ lineHeight: 1.6, color: '#333' }}>
@@ -494,7 +556,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
 
               {/* Policies */}
               <Box sx={{ mb: 3 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#333' }}>
+                <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: '#0d47a1', background: '#f3f7fb', display: 'inline-block', px: 1, borderRadius: 0.5 }}>
                   Course Policies
                 </Typography>
 
@@ -514,7 +576,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
               {/* Schedule */}
               {templateData.schedule && (
                 <Box sx={{ mb: 3 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#333' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: '#0d47a1', background: '#f3f7fb', display: 'inline-block', px: 1, borderRadius: 0.5 }}>
                     Course Schedule
                   </Typography>
                   <Typography sx={{ lineHeight: 1.6, whiteSpace: 'pre-line', color: '#333' }}>

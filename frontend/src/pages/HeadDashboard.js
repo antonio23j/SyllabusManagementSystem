@@ -108,9 +108,9 @@ const HeadDashboard = () => {
   const rejectedCount = allSyllabi.filter(s => s.status === 'rejected').length;
 
   const statCards = [
-    { title: 'Pending Review', count: pendingSyllabi.length, icon: HourglassEmpty, color: 'warning', desc: 'Syllabi awaiting your review' },
-    { title: 'Approved', count: approvedCount, icon: ThumbUp, color: 'success', desc: 'Syllabi you\'ve approved' },
-    { title: 'Rejected', count: rejectedCount, icon: ThumbDown, color: 'error', desc: 'Syllabi you\'ve rejected' },
+    { title: 'Pending Review', count: pendingSyllabi.length, icon: HourglassEmpty, color: 'warning', desc: 'Syllabus awaiting your review' },
+    { title: 'Approved', count: approvedCount, icon: ThumbUp, color: 'success', desc: 'Syllabus you\'ve approved' },
+    { title: 'Rejected', count: rejectedCount, icon: ThumbDown, color: 'error', desc: 'Syllabus you\'ve rejected' },
   ];
 
   return (
@@ -207,12 +207,12 @@ const HeadDashboard = () => {
           ))}
         </Grid>
 
-        {/* Pending Syllabi Section */}
+        {/* Pending Syllabus Section */}
         <Card sx={{ mb: 4 }}>
           <CardContent>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
               <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                Pending Syllabi for Review
+                Pending Syllabus for Review
               </Typography>
               <Chip label={pendingSyllabi.length} color="warning" size="small" />
             </Box>
@@ -223,7 +223,7 @@ const HeadDashboard = () => {
               </Box>
             ) : pendingSyllabi.length === 0 ? (
               <Alert severity="info" sx={{ borderRadius: 2 }}>
-                No syllabi pending review at this time. Great job staying on top of reviews!
+                No syllabus pending review at this time. Great job staying on top of reviews!
               </Alert>
             ) : (
               <List disablePadding>
