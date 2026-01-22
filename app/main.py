@@ -17,7 +17,7 @@ app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(users.router, prefix="/users", tags=["Users"])
 app.include_router(departments.router, prefix="/departments", tags=["Departments"])
 app.include_router(subjects.router, prefix="/subjects", tags=["Subjects"])
-app.include_router(syllabi.router, prefix="/syllabi", tags=["Syllabi"])
+app.include_router(syllabi.router, prefix="/syllabi", tags=["Syllabus"])
 
 @app.get("/")
 def read_root():

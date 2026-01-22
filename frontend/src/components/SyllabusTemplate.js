@@ -17,18 +17,21 @@ import { useTheme } from '@mui/material/styles';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import api, { formatTeacherName } from '../services/api';
+import {useSnackbar} from "../services/SnacbarService";
 
 const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSubject = null }) => {
   const theme = useTheme();
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const { show } = useSnackbar();
 
   const downloadBackendPDF = async () => {
     if (!syllabus) return;
 
     try {
-      const response = await api.get(`/syllabi/${syllabus.id}/pdf`, {
-        responseType: 'blob'
-      });
+    const response = await api.post(`/syllabi/${syllabus.id}/pdf`,
+      { template_data: templateData },
+      { responseType: 'blob' }
+    );
 
       const blob = new Blob([response.data], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
@@ -37,7 +40,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
       a.href = url;
 
       const contentDisposition = response.headers['content-disposition'];
-      let filename = 'syllabus.pdf';
+      let filename = templateData.courseTitle + '_' + templateData.language;
       if (contentDisposition) {
         const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
         if (filenameMatch && filenameMatch[1]) {
@@ -52,7 +55,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
       document.body.removeChild(a);
     } catch (error) {
       console.error('Error downloading PDF:', error);
-      alert('Error downloading PDF. Please try again.');
+      show('Error downloading PDF. Please try again.', 'error');
     }
   };
 
@@ -64,6 +67,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
     email: currentUser.email || '',
     officeHours: '',
     typology: '',
+    language: 'AL',
     type: '',
     year: '',
     semester: '',
@@ -76,6 +80,11 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
     attendancePolicy: '',
     academicIntegrity: '',
     schedule: '',
+    assignmentsPercent : '',
+    midtermPercent : '',
+    finalPercent : '',
+    otherPercent : '',
+    credits: '',
     ...syllabus?.template_data
   });
 
@@ -86,43 +95,218 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
     }));
   };
 
-  const generatePDF = async () => {
-    if (!templateRef.current) return;
+ const generatePDF = async () => {
+  if (!templateRef.current) return;
 
-    try {
-      const canvas = await html2canvas(templateRef.current, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff'
-      });
+  try {
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 20;
+    let yPos = margin;
 
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
+    // Helper function to add text with word wrap
+    const addText = (text, x, y, maxWidth, options = {}) => {
+      const lines = pdf.splitTextToSize(text, maxWidth);
+      pdf.text(lines, x, y, options);
+      return lines.length * 5; // Return height used
+    };
 
-      const imgWidth = 210;
-      const pageHeight = 295;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
+    // Helper function for table cell
+    const drawCell = (x, y, width, height, text, isBold = false) => {
+      pdf.rect(x, y, width, height);
+      pdf.setFont('helvetica', isBold ? 'bold' : 'normal');
+      pdf.setFontSize(9);
+      const lines = pdf.splitTextToSize(text, width - 4);
+      pdf.text(lines, x + 2, y + 5);
+    };
 
-      let position = 0;
+    // === PAGE 1: HEADER AND COURSE INFO TABLE ===
 
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+    // Title
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(14);
+    pdf.text('MASTER SHKENCOR NË "DATA SCIENCE AND ARTIFICIAL INTELLIGENCE"', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 10;
 
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
+    pdf.setFontSize(12);
+    pdf.text('PROGRAMI I LËNDËS:', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 15;
 
-      pdf.save(`syllabus-${templateData.courseCode || 'template'}.pdf`);
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      alert('Error generating PDF. Please try again.');
+    // Course Information Table
+    const tableStartX = margin;
+    const colWidths = [50, 30, 30, 30, 30]; // Adjust as needed
+    const rowHeight = 10;
+
+    // Table Header
+    pdf.setFontSize(9);
+    pdf.setFont('helvetica', 'bold');
+    drawCell(tableStartX, yPos, colWidths[0], rowHeight, 'Aktiviteti mësimor', true);
+    drawCell(tableStartX + colWidths[0], yPos, colWidths[1], rowHeight, 'Leksione', true);
+    drawCell(tableStartX + colWidths[0] + colWidths[1], yPos, colWidths[2], rowHeight, 'Ushtrime', true);
+    drawCell(tableStartX + colWidths[0] + colWidths[1] + colWidths[2], yPos, colWidths[3], rowHeight, 'Laboratore', true);
+    drawCell(tableStartX + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3], yPos, colWidths[4], rowHeight, 'Totale', true);
+    yPos += rowHeight;
+
+    // Table Rows
+    const tableData = [
+      ['Detyrimi i studentit', 'Jo të detyrueshëm', '75%', '100%', '100%'],
+      ['Orë mesimore', '', '', '', ''],
+      ['Studim individuale', '', '', '', ''],
+      ['Gjuha e zhvillimit të mësimit', 'Anglisht', '', '', ''],
+      [`Tipologjia e lëndës / Lloji i lëndës/ Kodi i lëndës`, `${templateData.typology || 'B'} / ${templateData.type === 'compulsory' ? 'E detyrueshme' : 'Zgjedhore'} / ${templateData.courseCode || ''}`, '', '', ''],
+      ['Kodi i etikës', 'Referuar Kodit të etikës së UT, miratuar me Vendim Nr. 12, datë 18.04.2011', '', '', ''],
+      ['Mënyra e shlyerjes', 'Provim', '', '', ''],
+      ['Kredite', '6', '', '', ''],
+      [`Zhvillimi i Mësimit`, `Viti ${templateData.year || 'I'}, Semestri ${templateData.semester || 'II'}, 15 javë: 2 orë leksione, 2 orë seminare, 2 orë laborator/javë`, '', '', ''],
+      ['Zhvillimi i Provimit', 'Vetëm me shkrim, 45-50 pikë nota pesë, çdo dhjetë pikë vlerësimi shtohet me një notë.', '', '', '']
+    ];
+
+    pdf.setFont('helvetica', 'normal');
+    tableData.forEach(row => {
+      const cellHeight = rowHeight;
+      drawCell(tableStartX, yPos, colWidths[0], cellHeight, row[0]);
+      drawCell(tableStartX + colWidths[0], yPos, colWidths[1], cellHeight, row[1]);
+      drawCell(tableStartX + colWidths[0] + colWidths[1], yPos, colWidths[2], cellHeight, row[2]);
+      drawCell(tableStartX + colWidths[0] + colWidths[1] + colWidths[2], yPos, colWidths[3], cellHeight, row[3]);
+      drawCell(tableStartX + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3], yPos, colWidths[4], cellHeight, row[4]);
+      yPos += cellHeight;
+    });
+
+    yPos += 10;
+
+    // Grading Table
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(10);
+    pdf.text('Vlerësimi, Nota, Provim', tableStartX, yPos);
+    yPos += 7;
+
+    const gradingItems = [
+      'Pjesëmarrja dhe aktivizimi',
+      'Kontrolle të ndërmjetme',
+      'Detyra kursi',
+      'Laboratore',
+      'Praktika në terren',
+      'Provimit final',
+      'Gjithsej'
+    ];
+
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
+    gradingItems.forEach(item => {
+      pdf.text(`• ${item}`, tableStartX + 5, yPos);
+      yPos += 5;
+    });
+
+    yPos += 10;
+
+    // === PAGE 2: COURSE CONTENT ===
+    pdf.addPage();
+    yPos = margin;
+
+    // Course Concepts
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(11);
+    pdf.text('Konceptet themelore', margin, yPos);
+    yPos += 7;
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(10);
+    const conceptsHeight = addText(templateData.additionalDescription || '', margin, yPos, pageWidth - 2 * margin);
+    yPos += conceptsHeight + 10;
+
+    // Objectives
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(11);
+    pdf.text('Objektivat', margin, yPos);
+    yPos += 7;
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(10);
+    const objectivesHeight = addText(templateData.learningObjectives || '', margin, yPos, pageWidth - 2 * margin);
+    yPos += objectivesHeight + 10;
+
+    // Prerequisites
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(11);
+    pdf.text('Njohuritë paraprake', margin, yPos);
+    yPos += 7;
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(10);
+    const prereqHeight = addText(templateData.prerequisites || 'Nuk ka', margin, yPos, pageWidth - 2 * margin);
+    yPos += prereqHeight + 10;
+
+    // Check if we need a new page
+    if (yPos > pageHeight - 50) {
+      pdf.addPage();
+      yPos = margin;
     }
-  };
+
+    // Skills
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(11);
+    pdf.text('Aftësitë me të cilat pajiset studenti', margin, yPos);
+    yPos += 7;
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(10);
+    const skillsText = 'Studentët do të zhvillojnë aftësi analitike dhe praktike në fushen e lëndës.';
+    const skillsHeight = addText(skillsText, margin, yPos, pageWidth - 2 * margin);
+    yPos += skillsHeight + 10;
+
+    // Schedule/Syllabus
+    if (yPos > pageHeight - 60) {
+      pdf.addPage();
+      yPos = margin;
+    }
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(11);
+    pdf.text('Tematika e Leksioneve', margin, yPos);
+    yPos += 7;
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(10);
+    const scheduleHeight = addText(templateData.schedule || 'Do të njoftohet në fillim të semestrit', margin, yPos, pageWidth - 2 * margin);
+    yPos += scheduleHeight + 10;
+
+    // Literature
+    if (yPos > pageHeight - 50) {
+      pdf.addPage();
+      yPos = margin;
+    }
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(11);
+    pdf.text('Literatura', margin, yPos);
+    yPos += 7;
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(10);
+    pdf.text('Tekste bazë:', margin, yPos);
+    yPos += 7;
+    pdf.setFont('helvetica', 'normal');
+    const litHeight = addText(templateData.textbooks || 'Do të njoftohet në fillim të semestrit', margin, yPos, pageWidth - 2 * margin);
+    yPos += litHeight + 15;
+
+    // Signatures
+    if (yPos > pageHeight - 40) {
+      pdf.addPage();
+      yPos = margin;
+    }
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(10);
+    pdf.text('Titullari i lëndës', margin, yPos);
+    pdf.text('Përgjegjësi i Departamentit', pageWidth - margin - 60, yPos);
+    yPos += 15;
+
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(templateData.instructor || '', margin, yPos);
+    pdf.text('Prof. Dr. [Emri]', pageWidth - margin - 60, yPos);
+
+    // Save PDF
+    pdf.save(`syllabus-${templateData.courseCode || 'template'}.pdf`);
+  } catch (error) {
+    console.error('Error generating PDF:', error);
+    show('Error generating PDF. Please try again.', 'error');
+  }
+};
 
   const isFormValid = templateData.courseTitle && templateData.courseCode;
 
@@ -142,7 +326,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
   return (
     <Box
       sx={{
-        p: { xs: 2, md: 3 },
+        p: { xs: 12, md: 3 },
         bgcolor: 'background.default',
         minHeight: '100%',
         backgroundImage: theme.palette.mode === 'light'
@@ -200,12 +384,23 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
           >
             Download PDF
           </Button>
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+             <InputLabel>Language</InputLabel>
+              <Select
+                value={templateData.language}
+                label="Select language"
+                onChange={(e) => handleInputChange('language', e.target.value)}
+              >
+                <MenuItem value="AL">AL</MenuItem>
+                <MenuItem value="EN">EN</MenuItem>
+              </Select>
+</FormControl>
         </Box>
       </Paper>
 
-      <Grid container spacing={3}>
+      <Grid container xs={12} md={6} spacing={3}>
         {/* Form Fields */}
-        <Grid item xs={12} md={6}>
+        <Grid item size={6}>
           <Paper
             sx={{
               p: 3,
@@ -287,11 +482,11 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
               </Select>
             </FormControl>
           </Paper>
-
+       </Grid>
+        <Grid item size={6}>
           <Paper
             sx={{
               p: 3,
-              mt: 3,
               borderRadius: 3,
               border: '1px solid',
               borderColor: 'divider',
@@ -349,7 +544,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
         </Grid>
 
         {/* Template Preview - Keep white background for PDF generation */}
-        <Grid item xs={12} md={6}>
+        <Grid item size={4}>
           <Paper
             sx={{
               p: 3,
@@ -366,31 +561,39 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
             <Box
               ref={templateRef}
               sx={{
-                p: 3,
-                bgcolor: '#ffffff',
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 2,
-                fontFamily: 'Arial, sans-serif',
-                color: '#333',
-                maxWidth: '600px',
-                margin: '0 auto',
-                boxShadow: '0 12px 30px rgba(15, 23, 42, 0.08)',
+                  p: 3,
+                  bgcolor: '#ffffff',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 2,
+                  fontFamily: 'Arial, sans-serif',
+                  color: '#222',
+                  maxWidth: '700px',
+                  margin: '0 auto',
+                  boxShadow: '0 16px 40px rgba(15, 23, 42, 0.12)',
               }}
             >
               {/* Header - Always use print-friendly colors */}
-              <Box sx={{ textAlign: 'center', mb: 3, borderBottom: '2px solid #1565C0', pb: 2 }}>
-                <Typography variant="h4" sx={{ color: '#1565C0', fontWeight: 'bold', mb: 1 }}>
-                  {templateData.courseTitle || 'Course Title'}
-                </Typography>
-                <Typography variant="h6" sx={{ color: '#666' }}>
-                  {templateData.courseCode || 'Course Code'}
-                </Typography>
-              </Box>
+                <Box sx={{ position: 'relative', textAlign: 'center', mb: 3, pb: 2 }}>
+                  <Box sx={{ position: 'absolute', left: 0, right: 0, top: 0, height: 10, background: 'linear-gradient(90deg,#1565C0,#42A5F5)', borderTopLeftRadius: 8, borderTopRightRadius: 8 }} />
+                  <Box sx={{ pt: 2 }} />
+                  <Typography variant="h4" sx={{ color: '#0d47a1', fontWeight: 800, mb: 0.5, fontFamily: 'Georgia, serif' }}>
+                    {templateData.courseTitle || 'Course Title'}
+                  </Typography>
+                  <Typography variant="h6" sx={{ color: '#546e7a', fontWeight: 600 }}>
+                    {templateData.courseCode || 'Course Code'}
+                  </Typography>
+                  {/* code pill top-right */}
+                  <Box sx={{ position: 'absolute', top: 14, right: 12 }}>
+                    <Box sx={{ bgcolor: '#e3f2fd', color: '#0d47a1', px: 1.5, py: 0.4, borderRadius: 1.5, fontWeight: 700, fontSize: '0.8rem', boxShadow: '0 2px 6px rgba(13,71,161,0.08)' }}>
+                      {templateData.courseCode || ''}
+                    </Box>
+                  </Box>
+                </Box>
 
               {/* Instructor Info */}
               <Box sx={{ mb: 3 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#333' }}>
+                <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: '#0d47a1', background: '#f3f7fb', display: 'inline-block', px: 1, borderRadius: 0.5 }}>
                   Instructor Information
                 </Typography>
                 <Typography sx={{ color: '#333' }}>
@@ -409,7 +612,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
               {/* Subject Information */}
               {(templateData.typology || templateData.type) && (
                 <Box sx={{ mb: 3 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#333' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: '#0d47a1', background: '#f3f7fb', display: 'inline-block', px: 1, borderRadius: 0.5 }}>
                     Subject Information
                   </Typography>
                   {templateData.typology && (
@@ -437,7 +640,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
               {/* Course Description */}
               {(templateData.year || templateData.semester || templateData.additionalDescription) && (
                 <Box sx={{ mb: 3 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#333' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: '#0d47a1', background: '#f3f7fb', display: 'inline-block', px: 1, borderRadius: 0.5 }}>
                     Course Description
                   </Typography>
                   <Typography sx={{ lineHeight: 1.6, color: '#333' }}>
@@ -449,7 +652,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
               {/* Learning Objectives */}
               {templateData.learningObjectives && (
                 <Box sx={{ mb: 3 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#333' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: '#0d47a1', background: '#f3f7fb', display: 'inline-block', px: 1, borderRadius: 0.5 }}>
                     Learning Objectives
                   </Typography>
                   <Typography sx={{ lineHeight: 1.6, color: '#333' }}>
@@ -461,7 +664,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
               {/* Prerequisites */}
               {templateData.prerequisites && (
                 <Box sx={{ mb: 3 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#333' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: '#0d47a1', background: '#f3f7fb', display: 'inline-block', px: 1, borderRadius: 0.5 }}>
                     Prerequisites
                   </Typography>
                   <Typography sx={{ color: '#333' }}>{templateData.prerequisites}</Typography>
@@ -470,7 +673,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
 
               {/* Required Materials */}
               <Box sx={{ mb: 3 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#333' }}>
+                <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: '#0d47a1', background: '#f3f7fb', display: 'inline-block', px: 1, borderRadius: 0.5 }}>
                   Required Materials
                 </Typography>
                 <Typography sx={{ lineHeight: 1.6, color: '#333' }}>
@@ -480,7 +683,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
 
               {/* Grading Policy */}
               <Box sx={{ mb: 3 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#333' }}>
+                <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: '#0d47a1', background: '#f3f7fb', display: 'inline-block', px: 1, borderRadius: 0.5 }}>
                   Grading Policy
                 </Typography>
                 <Typography sx={{ lineHeight: 1.6, color: '#333' }}>
@@ -494,7 +697,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
 
               {/* Policies */}
               <Box sx={{ mb: 3 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#333' }}>
+                <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: '#0d47a1', background: '#f3f7fb', display: 'inline-block', px: 1, borderRadius: 0.5 }}>
                   Course Policies
                 </Typography>
 
@@ -514,7 +717,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
               {/* Schedule */}
               {templateData.schedule && (
                 <Box sx={{ mb: 3 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#333' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: '#0d47a1', background: '#f3f7fb', display: 'inline-block', px: 1, borderRadius: 0.5 }}>
                     Course Schedule
                   </Typography>
                   <Typography sx={{ lineHeight: 1.6, whiteSpace: 'pre-line', color: '#333' }}>
@@ -538,7 +741,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
         </Grid>
 
         {/* Additional Fields */}
-        <Grid item xs={12}>
+        <Grid item size={8}>
           <Paper
             sx={{
               p: 3,
@@ -548,11 +751,17 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
               boxShadow: 'none',
             }}
           >
-            <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: 'primary.main' }}>
-              Additional Information
-            </Typography>
-            <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
+          <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: 'primary.main', mb: 3 }}>
+            Additional Information
+          </Typography>
+
+          <Grid container xs={12} md={6} spacing={3}>
+            {/* Section 1: Textbooks & Materials */}
+            <Grid item xs={12} md={6} size={12}>
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5, color: 'text.primary' }}>
+                  Required Materials
+                </Typography>
                 <TextField
                   fullWidth
                   label="Required Textbooks/Materials"
@@ -560,14 +769,19 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
                   onChange={(e) => handleInputChange('textbooks', e.target.value)}
                   multiline
                   rows={3}
+                  placeholder="List all required textbooks, materials, and resources..."
                 />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 500 }}>
-                  Grading Policy (Percentages)
+              </Box>
+            </Grid>
+
+            {/* Section 2: Grading Policy */}
+            <Grid item size={12}>
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5, color: 'text.primary' }}>
+                  Grading Policy (Total should equal 100%)
                 </Typography>
                 <Grid container spacing={2}>
-                  <Grid item xs={6}>
+                  <Grid item size={6}>
                     <TextField
                       fullWidth
                       label="Assignments (%)"
@@ -578,7 +792,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
                       size="small"
                     />
                   </Grid>
-                  <Grid item xs={6}>
+                  <Grid item size={6}>
                     <TextField
                       fullWidth
                       label="Midterm (%)"
@@ -589,7 +803,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
                       size="small"
                     />
                   </Grid>
-                  <Grid item xs={6}>
+                  <Grid item size={6}>
                     <TextField
                       fullWidth
                       label="Final Exam (%)"
@@ -600,7 +814,7 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
                       size="small"
                     />
                   </Grid>
-                  <Grid item xs={6}>
+                  <Grid item size={6}>
                     <TextField
                       fullWidth
                       label="Other (%)"
@@ -608,44 +822,63 @@ const SyllabusTemplate = ({ syllabus, onClose, onSave, mode = 'view', selectedSu
                       value={templateData.otherPercent || ''}
                       onChange={(e) => handleInputChange('otherPercent', e.target.value)}
                       inputProps={{ min: 0, max: 100 }}
-                      helperText="Participation, quizzes, etc."
+                      placeholder="Participation, etc."
                       size="small"
                     />
                   </Grid>
                 </Grid>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  label="Attendance Policy"
-                  value={templateData.attendancePolicy}
-                  onChange={(e) => handleInputChange('attendancePolicy', e.target.value)}
-                  multiline
-                  rows={2}
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  label="Academic Integrity Policy"
-                  value={templateData.academicIntegrity}
-                  onChange={(e) => handleInputChange('academicIntegrity', e.target.value)}
-                  multiline
-                  rows={2}
-                />
-              </Grid>
-              <Grid item xs={12}>
+              </Box>
+            </Grid>
+
+            {/* Section 3: Course Policies */}
+            <Grid item size={12}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5, color: 'text.primary' }}>
+                Course Policies
+              </Typography>
+            </Grid>
+
+            <Grid item size={12}>
+              <TextField
+                fullWidth
+                label="Attendance Policy"
+                value={templateData.attendancePolicy}
+                onChange={(e) => handleInputChange('attendancePolicy', e.target.value)}
+                multiline
+                rows={3}
+                placeholder="Describe your attendance requirements and policies..."
+              />
+            </Grid>
+
+            <Grid item size={12}>
+              <TextField
+                fullWidth
+                label="Academic Integrity Policy"
+                value={templateData.academicIntegrity}
+                onChange={(e) => handleInputChange('academicIntegrity', e.target.value)}
+                multiline
+                rows={3}
+                placeholder="Outline academic integrity expectations..."
+              />
+            </Grid>
+
+            {/* Section 4: Course Schedule */}
+            <Grid item item size={12}>
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5, color: 'text.primary' }}>
+                  Course Schedule & Important Dates
+                </Typography>
                 <TextField
                   fullWidth
                   label="Course Schedule/Important Dates"
                   value={templateData.schedule}
                   onChange={(e) => handleInputChange('schedule', e.target.value)}
                   multiline
-                  rows={4}
-                  placeholder="Week 1: Introduction&#10;Week 2: Basic Concepts&#10;etc."
+                  rows={6}
+                  placeholder="Week 1: Introduction&#10;Week 2: Basic Concepts&#10;Week 3: Advanced Topics&#10;etc."
                 />
-              </Grid>
+              </Box>
             </Grid>
+          </Grid>
           </Paper>
         </Grid>
       </Grid>

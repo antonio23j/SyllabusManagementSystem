@@ -30,6 +30,7 @@ import {
   SwapHoriz,
   DarkMode,
   LightMode,
+  Refresh,
   People,
   Business,
   MenuBook,
@@ -45,6 +46,7 @@ import { ColorModeContext } from '../App';
 import { getStatusColor } from '../theme';
 import api, { formatTeacherName } from '../services/api';
 import SyllabusTemplate from '../components/SyllabusTemplate';
+import {useSnackbar} from "../services/SnacbarService";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -72,11 +74,14 @@ const AdminDashboard = () => {
   const [assignment, setAssignment] = useState({ teacher_id: '', subject_id: '' });
   const [selectedSyllabus, setSelectedSyllabus] = useState(null);
   const [showTemplate, setShowTemplate] = useState(false);
+  const [query, setQuery] = useState('');
+  const [openViewTemplate, setOpenViewTemplate] = useState(false);
+  const { show } = useSnackbar();
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     if (!user || user.role !== 'admin') {
-      alert('Access denied. Admin privileges required.');
+      show('Access denied. Admin privileges required.', 'error');
       navigate('/login');
       return;
     }
@@ -93,12 +98,19 @@ const AdminDashboard = () => {
       setUsers(response.data);
     } catch (error) {
       if (error.response?.status === 401) {
-        alert('Session expired. Please login again.');
+        show('Session expired. Please login again.', 'error');
         navigate('/login');
       } else {
         console.error('Failed to fetch users:', error);
       }
     }
+  };
+
+    const handleRefresh = () => {
+    fetchUsers();
+    fetchDepartments();
+    fetchSubjects();
+    fetchSyllabi();
   };
 
   const fetchDepartments = async () => {
@@ -107,7 +119,7 @@ const AdminDashboard = () => {
       setDepartments(response.data);
     } catch (error) {
       if (error.response?.status === 401) {
-        alert('Session expired. Please login again.');
+        show('Session expired. Please login again.', 'error');
         navigate('/login');
       } else {
         console.error('Failed to fetch departments:', error);
@@ -121,7 +133,7 @@ const AdminDashboard = () => {
       setSubjects(response.data);
     } catch (error) {
       if (error.response?.status === 401) {
-        alert('Session expired. Please login again.');
+        show('Session expired. Please login again.', 'error');
         navigate('/login');
       } else {
         console.error('Failed to fetch subjects:', error);
@@ -135,7 +147,7 @@ const AdminDashboard = () => {
       setSyllabi(response.data);
     } catch (error) {
       if (error.response?.status === 401) {
-        alert('Session expired. Please login again.');
+        show('Session expired. Please login again.', 'error');
         navigate('/login');
       } else {
         console.error('Failed to fetch syllabi:', error);
@@ -178,25 +190,25 @@ const AdminDashboard = () => {
         teacher_id: parseInt(selectedTeacher),
         subject_id: reassigningSubject.id
       });
-      alert('Subject reassigned successfully');
+      show('Subject reassigned successfully', 'success');
       setReassigningSubject(null);
       setSelectedTeacher('');
       fetchSubjects();
       fetchSyllabi();
     } catch (error) {
-      alert(getErrorMessage(error));
+      show(getErrorMessage(error), 'error');
     }
   };
 
   const handleCreateUser = async () => {
     try {
       if (!newUser.email || !newUser.role || !newUser.department_id) {
-        alert('Please fill in all required fields: email, role, and department.');
+        show('Please fill in all required fields: email, role, and department.','error');
         return;
       }
 
       if (!editingUser && !newUser.password) {
-        alert('Password is required for new users.');
+        show('Password is required for new users.', 'error');
         return;
       }
 
@@ -212,11 +224,11 @@ const AdminDashboard = () => {
         }
         await api.put(`/users/${editingUser.id}`, userData);
         setEditingUser(null);
-        alert('User updated successfully!');
+        show('User updated successfully!', 'success');
       } else {
         userData.password = newUser.password;
         await api.post('/users', userData);
-        alert('User created successfully!');
+        show('User created successfully!', 'success');
       }
 
       setOpenUser(false);
@@ -224,12 +236,12 @@ const AdminDashboard = () => {
       fetchUsers();
     } catch (error) {
       if (error.response?.status === 401) {
-        alert('Session expired. Please login again.');
+        show('Session expired. Please login again.', 'error');
         navigate('/login');
       } else if (error.response?.status === 403) {
-        alert('Access denied. Admin privileges required.');
+        show('Access denied. Admin privileges required.', 'error');
       } else {
-        alert(`Failed to save user: ${getErrorMessage(error)}`);
+        show(`Failed to save user: ${getErrorMessage(error)}`, 'error');
       }
     }
   };
@@ -237,7 +249,7 @@ const AdminDashboard = () => {
   const handleCreateDept = async () => {
     try {
       if (!newDept.name) {
-        alert('Department name is required.');
+        show('Department name is required.', 'error');
         return;
       }
 
@@ -249,10 +261,10 @@ const AdminDashboard = () => {
       if (editingDept) {
         await api.put(`/departments/${editingDept.id}`, deptData);
         setEditingDept(null);
-        alert('Department updated successfully!');
+        show('Department updated successfully!', 'success');
       } else {
         await api.post('/departments', deptData);
-        alert('Department created successfully!');
+        show('Department created successfully!', 'success');
       }
 
       setOpenDept(false);
@@ -260,12 +272,12 @@ const AdminDashboard = () => {
       fetchDepartments();
     } catch (error) {
       if (error.response?.status === 401) {
-        alert('Session expired. Please login again.');
+        show('Session expired. Please login again.', 'error');
         navigate('/login');
       } else if (error.response?.status === 403) {
-        alert('Access denied. Admin privileges required.');
+        show('Access denied. Admin privileges required.', 'error');
       } else {
-        alert(`Failed to save department: ${getErrorMessage(error)}`);
+        show(`Failed to save department: ${getErrorMessage(error)}`, 'error');
       }
     }
   };
@@ -273,7 +285,7 @@ const AdminDashboard = () => {
   const handleCreateSubject = async () => {
     try {
       if (!newSubject.name || !newSubject.code || !newSubject.department_id) {
-        alert('Please fill in all required fields: name, code, and department.');
+        show('Please fill in all required fields: name, code, and department.', 'error');
         return;
       }
 
@@ -286,10 +298,10 @@ const AdminDashboard = () => {
       if (editingSubject) {
         await api.put(`/subjects/${editingSubject.id}`, subjectData);
         setEditingSubject(null);
-        alert('Subject updated successfully!');
+        show('Subject updated successfully!', 'success');
       } else {
         await api.post('/subjects', subjectData);
-        alert('Subject created successfully!');
+        show('Subject created successfully!', 'success');
       }
 
       setOpenSubject(false);
@@ -297,12 +309,12 @@ const AdminDashboard = () => {
       fetchSubjects();
     } catch (error) {
       if (error.response?.status === 401) {
-        alert('Session expired. Please login again.');
+        show('Session expired. Please login again.', 'error');
         navigate('/login');
       } else if (error.response?.status === 403) {
-        alert('Access denied. Admin privileges required.');
+        show('Access denied. Admin privileges required.', 'error');
       } else {
-        alert(`Failed to save subject: ${getErrorMessage(error)}`);
+        show(`Failed to save subject: ${getErrorMessage(error)}`, 'error');
       }
     }
   };
@@ -310,7 +322,7 @@ const AdminDashboard = () => {
   const handleCreateSyllabus = async () => {
     try {
       if (!newSyllabus.subject_id || !newSyllabus.teacher_id) {
-        alert('Please select a subject and teacher.');
+        show('Please select a subject and teacher.', 'error');
         return;
       }
 
@@ -318,16 +330,16 @@ const AdminDashboard = () => {
         subject_id: parseInt(newSyllabus.subject_id),
         teacher_id: parseInt(newSyllabus.teacher_id),
         template_data: newSyllabus.template_data || {},
-        status: newSyllabus.status
+        status: newSyllabus.status || 'Draft'
       };
 
       if (editingSyllabus) {
         await api.put(`/syllabi/${editingSyllabus.id}`, syllabusData);
         setEditingSyllabus(null);
-        alert('Syllabus updated successfully!');
+        show('Syllabus updated successfully!', 'success');
       } else {
         await api.post('/syllabi', syllabusData);
-        alert('Syllabus created successfully!');
+        show('Syllabus created successfully!', 'success');
       }
 
       setOpenSyllabus(false);
@@ -335,12 +347,12 @@ const AdminDashboard = () => {
       fetchSyllabi();
     } catch (error) {
       if (error.response?.status === 401) {
-        alert('Session expired. Please login again.');
+        show('Session expired. Please login again.', 'error');
         navigate('/login');
       } else if (error.response?.status === 403) {
-        alert('Access denied. Admin privileges required.');
+        show('Access denied. Admin privileges required.', 'error');
       } else {
-        alert(`Failed to save syllabus: ${getErrorMessage(error)}`);
+        show(`Failed to save syllabus: ${getErrorMessage(error)}`, 'error');
       }
     }
   };
@@ -350,9 +362,11 @@ const AdminDashboard = () => {
       try {
         await api.post('/subjects/assign', assignment);
         setAssignment({ teacher_id: '', subject_id: '' });
-        alert('Subject assigned successfully!');
+        show('Subject assigned successfully!', 'success');
+                fetchSubjects();
+        fetchSyllabi();
       } catch (error) {
-        alert(`Failed to assign subject: ${getErrorMessage(error)}`);
+        show(`Failed to assign subject: ${getErrorMessage(error)}`, 'error');
       }
     }
   };
@@ -373,20 +387,20 @@ const AdminDashboard = () => {
       try {
         await api.delete(`/syllabi/${syllabusId}`);
         fetchSyllabi();
-        alert('Syllabus deleted successfully!');
+        show('Syllabus deleted successfully!', 'success');
       } catch (error) {
-        alert(`Failed to delete syllabus: ${getErrorMessage(error)}`);
+        show(`Failed to delete syllabus: ${getErrorMessage(error)}`, 'error');
       }
     }
   };
 
   const handleViewTemplate = (syllabus) => {
     setSelectedSyllabus(syllabus);
-    setShowTemplate(true);
+    setOpenViewTemplate(true)
   };
 
   const handleCloseTemplate = () => {
-    setShowTemplate(false);
+    setOpenViewTemplate(false)
     setSelectedSyllabus(null);
   };
 
@@ -425,9 +439,9 @@ const AdminDashboard = () => {
       try {
         await api.delete(`/users/${userId}`);
         fetchUsers();
-        alert('User deleted successfully!');
+        show('User deleted successfully!', 'success');
       } catch (error) {
-        alert(`Failed to delete user: ${getErrorMessage(error)}`);
+        show(`Failed to delete user: ${getErrorMessage(error)}`, 'error');
       }
     }
   };
@@ -437,9 +451,9 @@ const AdminDashboard = () => {
       try {
         await api.delete(`/departments/${deptId}`);
         fetchDepartments();
-        alert('Department deleted successfully!');
+        show('Department deleted successfully!', 'success');
       } catch (error) {
-        alert(`Failed to delete department: ${getErrorMessage(error)}`);
+        show(`Failed to delete department: ${getErrorMessage(error)}`, 'error');
       }
     }
   };
@@ -449,9 +463,9 @@ const AdminDashboard = () => {
       try {
         await api.delete(`/subjects/${subjectId}`);
         fetchSubjects();
-        alert('Subject deleted successfully!');
+        show('Subject deleted successfully!', 'success');
       } catch (error) {
-        alert(`Failed to delete subject: ${getErrorMessage(error)}`);
+        show(`Failed to delete subject: ${getErrorMessage(error)}`, 'error');
       }
     }
   };
@@ -465,20 +479,34 @@ const AdminDashboard = () => {
     }
   };
 
-  const listItemBaseSx = (paletteColor, actionWidth = 112) => ({
+   const listItemBaseSx = (paletteColor, actionWidth = 112) => ({
     borderRadius: 2,
     mb: 1,
     px: 1.5,
     py: 1,
     pr: `${actionWidth}px`,
     border: '1px solid',
-    borderColor: alpha(theme.palette[paletteColor].main, 0.15),
-    bgcolor: alpha(theme.palette[paletteColor].main, 0.04),
+    borderColor: alpha(theme.palette[paletteColor].main, 0.12),
+    bgcolor: theme.palette.mode === 'light' ? alpha(theme.palette[paletteColor].main, 0.03) : alpha(theme.palette.common.white, 0.02),
     alignItems: 'center',
+    transition: 'transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease',
     '&:hover': {
-      bgcolor: alpha(theme.palette[paletteColor].main, 0.08),
+      transform: 'translateY(-2px)',
+      boxShadow: theme.shadows[2],
+      borderColor: alpha(theme.palette[paletteColor].main, 0.22),
     },
   });
+
+  // Shared text style for list items to keep alignment consistent across lists
+  const listTextSx = {
+    pr: 2,
+    minWidth: 0,
+    '& .MuiListItemText-primary, & .MuiListItemText-secondary': {
+      whiteSpace: 'normal',
+      wordBreak: 'normal',
+      overflowWrap: 'break-word',
+    },
+  };
 
   const actionButtonSx = {
     bgcolor: alpha(theme.palette.common.black, 0.04),
@@ -496,7 +524,7 @@ const AdminDashboard = () => {
     { title: 'Users', count: users.length, icon: People, color: 'primary', desc: 'Manage system users and roles', action: () => setOpenUser(true), actionLabel: 'Add User' },
     { title: 'Departments', count: departments.length, icon: Business, color: 'secondary', desc: 'Organize academic departments', action: () => setOpenDept(true), actionLabel: 'Add Department' },
     { title: 'Subjects', count: subjects.length, icon: MenuBook, color: 'info', desc: 'Manage course subjects', action: () => setOpenSubject(true), actionLabel: 'Add Subject' },
-    { title: 'Syllabi', count: syllabi.length, icon: Description, color: 'success', desc: 'Course syllabi and templates', action: () => setOpenSyllabus(true), actionLabel: 'Manage Syllabi' },
+    { title: 'Syllabus', count: syllabi.length, icon: Description, color: 'success', desc: 'Course syllabus and templates', action: () => setOpenSyllabus(true), actionLabel: 'Manage Syllabus' },
   ];
 
   return (
@@ -505,8 +533,9 @@ const AdminDashboard = () => {
         minHeight: '100vh',
         bgcolor: 'background.default',
         backgroundImage: theme.palette.mode === 'light'
-          ? 'radial-gradient(circle at top right, rgba(31, 75, 153, 0.12), transparent 55%), radial-gradient(circle at bottom left, rgba(15, 118, 110, 0.1), transparent 50%)'
-          : 'radial-gradient(circle at top right, rgba(99, 165, 255, 0.12), transparent 55%), radial-gradient(circle at bottom left, rgba(79, 209, 197, 0.12), transparent 50%)',
+          ? 'linear-gradient(180deg, rgba(245,248,255,0.6) 0%, rgba(250,251,253,0.4) 50%), radial-gradient(circle at 10% 10%, rgba(31,75,153,0.06), transparent 20%)'
+          : 'linear-gradient(180deg, rgba(6,10,15,0.6) 0%, rgba(12,18,25,0.4) 50%), radial-gradient(circle at 90% 90%, rgba(79,209,197,0.04), transparent 20%)',
+        backgroundBlendMode: 'overlay',
       }}
     >
       <Container maxWidth="lg" sx={{ pt: 4 }}>
@@ -540,22 +569,32 @@ const AdminDashboard = () => {
                   Admin Dashboard
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Manage users, departments, subjects, and syllabi
+                  Manage users, departments, subjects, and syllabus
                 </Typography>
               </Box>
             </Box>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <IconButton onClick={colorMode.toggleColorMode}>
-                {theme.palette.mode === 'dark' ? <LightMode /> : <DarkMode />}
-              </IconButton>
-              <Button
-                variant="outlined"
-                startIcon={<Logout />}
-                onClick={handleLogout}
-              >
-                Logout
-              </Button>
-            </Box>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <TextField
+                  placeholder="Search users, subjects, departments..."
+                  size="small"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  sx={{ width: 300 }}
+                />
+                <IconButton onClick={handleRefresh} title="Refresh">
+                  <Refresh />
+                </IconButton>
+                <IconButton onClick={colorMode.toggleColorMode}>
+                  {theme.palette.mode === 'dark' ? <LightMode /> : <DarkMode />}
+                </IconButton>
+                <Button
+                  variant="outlined"
+                  startIcon={<Logout />}
+                  onClick={handleLogout}
+                >
+                  Logout
+                </Button>
+              </Box>
           </Box>
         </Paper>
       </Container>
@@ -569,7 +608,15 @@ const AdminDashboard = () => {
               <Card
                 sx={{
                   height: '100%',
-                  borderColor: alpha(theme.palette[stat.color].main, 0.2),
+                  borderColor: alpha(theme.palette[stat.color].main, 0.12),
+                  background: theme.palette.mode === 'light'
+                    ? `linear-gradient(135deg, ${alpha(theme.palette[stat.color].light || theme.palette[stat.color].main, 0.06)}, transparent 40%)`
+                    : `linear-gradient(135deg, ${alpha(theme.palette[stat.color].dark || theme.palette[stat.color].main, 0.04)}, transparent 40%)`,
+                  transition: 'transform 150ms ease, box-shadow 150ms ease',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: theme.shadows[6],
+                  },
                 }}
               >
                 <CardContent>
@@ -657,21 +704,35 @@ const AdminDashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Lists Section */}
-        <Grid container spacing={3}>
-          {/* Users List */}
-          <Grid item xs={12} md={6}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>Users</Typography>
-                  <Chip label={users.length} size="small" color="primary" />
-                </Box>
-                <List dense sx={{ maxHeight: 320, overflow: 'auto', pr: 0.5 }}>
-                  {users.map(user => (
+        {/* Lists Section - 2x2 grid: Users | Departments (top row), Syllabus | Subjects (bottom row) */}
+        <Box sx={{ minHeight: '100vh' }}>
+      <Grid container spacing={3}>
+        {/* Row 1 - Users */}
+        <Grid item xs={12} md={6}>
+          <Card sx={{
+            borderRadius: 3,
+            boxShadow: theme.shadows[2],
+            height: '600px',
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
+            <CardContent sx={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              p: 2
+            }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>Users</Typography>
+                <Chip label={users.length} size="small" color="primary" />
+              </Box>
+              <Box sx={{ flex: 1, overflow: 'auto', pr: 0.5 }}>
+                <List dense>
+                  {users.filter(u => !query || u.email.toLowerCase().includes(query.toLowerCase())).map(user => (
                     <ListItem
                       key={user.id}
-                      sx={listItemBaseSx('primary')}
+                      sx={listItemBaseSx('primary', wideActionWidth)}
                       secondaryAction={
                         <Box sx={{ display: 'flex', gap: 1 }}>
                           <Tooltip title="Edit">
@@ -688,12 +749,10 @@ const AdminDashboard = () => {
                       }
                     >
                       <ListItemText
-                        sx={{ pr: 2 }}
+                        sx={listTextSx}
                         primary={
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                              {user.email}
-                            </Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>{user.email}</Typography>
                             <Chip
                               label={user.role}
                               size="small"
@@ -706,23 +765,37 @@ const AdminDashboard = () => {
                     </ListItem>
                   ))}
                 </List>
-              </CardContent>
-            </Card>
-          </Grid>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
 
-          {/* Departments List */}
-          <Grid item xs={12} md={6}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>Departments</Typography>
-                  <Chip label={departments.length} size="small" color="secondary" />
-                </Box>
-                <List dense sx={{ maxHeight: 320, overflow: 'auto', pr: 0.5 }}>
-                  {departments.map(dept => (
+        {/* Row 1 - Departments */}
+        <Grid item xs={12} md={6}>
+          <Card sx={{
+            borderRadius: 3,
+            boxShadow: theme.shadows[2],
+            height: '600px',
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
+            <CardContent sx={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              p: 2
+            }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>Departments</Typography>
+                <Chip label={departments.length} size="small" color="secondary" />
+              </Box>
+              <Box sx={{ flex: 1, overflow: 'auto', pr: 0.5 }}>
+                <List dense>
+                  {departments.filter(d => !query || d.name.toLowerCase().includes(query.toLowerCase())).map(dept => (
                     <ListItem
                       key={dept.id}
-                      sx={listItemBaseSx('secondary')}
+                      sx={listItemBaseSx('secondary', wideActionWidth)}
                       secondaryAction={
                         <Box sx={{ display: 'flex', gap: 1 }}>
                           <Tooltip title="Edit">
@@ -738,24 +811,53 @@ const AdminDashboard = () => {
                         </Box>
                       }
                     >
-                      <ListItemText sx={{ pr: 2 }} primary={dept.name} />
+                      <ListItemText
+                        sx={listTextSx}
+                        primary={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>{dept.name}</Typography>
+                            {dept.head_id && (
+                              <Chip
+                                label={users.find(u => u.id === dept.head_id)?.email || 'Head'}
+                                size="small"
+                                sx={{ height: 20, fontSize: '0.7rem' }}
+                              />
+                            )}
+                          </Box>
+                        }
+                        secondary={users.find(u => u.id === dept.head_id) ? `Head: ${formatTeacherName(users.find(u => u.id === dept.head_id).email)}` : ''}
+                      />
                     </ListItem>
                   ))}
                 </List>
-              </CardContent>
-            </Card>
-          </Grid>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
 
-          {/* Subjects List */}
-          <Grid item xs={12} md={6}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>Subjects</Typography>
-                  <Chip label={subjects.length} size="small" color="info" />
-                </Box>
-                <List dense sx={{ maxHeight: 320, overflow: 'auto', pr: 0.5 }}>
-                  {subjects.map(subject => {
+        {/* Row 2 - Subjects */}
+        <Grid item xs={12} md={9}>
+          <Card sx={{
+            borderRadius: 3,
+            boxShadow: theme.shadows[2],
+            height: '600px',
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
+            <CardContent sx={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              p: 2
+            }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>Subjects</Typography>
+                <Chip label={subjects.length} size="small" color="info" />
+              </Box>
+              <Box sx={{ flex: 1, overflow: 'auto', pr: 0.5 }}>
+                <List dense>
+                  {subjects.filter(s => !query || s.name.toLowerCase().includes(query.toLowerCase()) || s.code.toLowerCase().includes(query.toLowerCase())).map(subject => {
                     const assignments = users.filter(user =>
                       user.role === 'teacher' &&
                       syllabi.some(s => s.subject_id === subject.id && s.teacher_id === user.id)
@@ -786,37 +888,59 @@ const AdminDashboard = () => {
                           </Box>
                         }
                       >
-                        <ListItemText
-                          sx={{
-                            pr: 2,
-                            minWidth: 0,
-                            '& .MuiListItemText-primary, & .MuiListItemText-secondary': {
-                              whiteSpace: 'normal',
-                              wordBreak: 'normal',
-                              overflowWrap: 'break-word',
-                            },
-                          }}
-                          primary={subject.name}
-                          secondary={`${subject.code}${assignedTeachers ? ` - ${assignedTeachers}` : ''}`}
+                        <ListItemText sx={listTextSx}
+                          primary={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography variant="body2" sx={{ fontWeight: 500 }}>{subject.name}</Typography>
+                              <Chip label={subject.code} size="small" sx={{ height: 20, fontSize: '0.7rem' }} />
+                            </Box>
+                          }
+                          secondary={assignedTeachers || ''}
                         />
                       </ListItem>
                     );
                   })}
                 </List>
-              </CardContent>
-            </Card>
-          </Grid>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
 
-          {/* Syllabi List */}
-          <Grid item xs={12} md={6}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>Syllabi</Typography>
-                  <Chip label={syllabi.length} size="small" color="success" />
-                </Box>
-                <List dense sx={{ maxHeight: 320, overflow: 'auto', pr: 0.5 }}>
-                  {syllabi.map(syllabus => {
+        {/* Row 2 - Syllabus */}
+        <Grid item xs={12} md={3}>
+          <Card sx={{
+            borderRadius: 3,
+            boxShadow: theme.shadows[2],
+            height: '600px',
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
+            <CardContent sx={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              p: 2
+            }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>Syllabus</Typography>
+                <Chip label={syllabi.length} size="small" color="success" />
+              </Box>
+              <Box sx={{ flex: 1, overflow: 'auto', pr: 0.5 }}>
+                <List dense>
+                  {syllabi.length === 0 && (
+                    <Box sx={{ py: 2, px: 1 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        No syllabus yet. Create one via the "Manage Syllabus" button above.
+                      </Typography>
+                    </Box>
+                  )}
+                  {syllabi.filter(sy => {
+                    if (!query) return true;
+                    const subject = subjects.find(s => s.id === sy.subject_id);
+                    const teacher = users.find(u => u.id === sy.teacher_id);
+                    return (subject && (subject.name || '').toLowerCase().includes(query.toLowerCase())) || (teacher && (teacher.email || '').toLowerCase().includes(query.toLowerCase()));
+                  }).map(syllabus => {
                     const subject = subjects.find(s => s.id === syllabus.subject_id);
                     const teacher = users.find(u => u.id === syllabus.teacher_id);
                     return (
@@ -846,7 +970,7 @@ const AdminDashboard = () => {
                         <ListItemText
                           sx={{
                             pr: 2,
-                            maxWidth: `calc(100% - ${wideActionWidth}px)`,
+                            minWidth: 0,
                             '& .MuiListItemText-primary, & .MuiListItemText-secondary': {
                               whiteSpace: 'normal',
                               wordBreak: 'normal',
@@ -855,9 +979,7 @@ const AdminDashboard = () => {
                           }}
                           primary={
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                {subject?.name || 'Unknown'} (v{syllabus.version})
-                              </Typography>
+                              <Typography variant="body2" sx={{ fontWeight: 500 }}>{subject?.name || 'Unknown'} (v{syllabus.version})</Typography>
                               <Chip
                                 label={syllabus.status}
                                 size="small"
@@ -872,10 +994,12 @@ const AdminDashboard = () => {
                     );
                   })}
                 </List>
-              </CardContent>
-            </Card>
-          </Grid>
+              </Box>
+            </CardContent>
+          </Card>
         </Grid>
+      </Grid>
+    </Box>
       </Container>
 
       {/* User Dialog */}
@@ -1190,35 +1314,36 @@ const AdminDashboard = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog
-        open={showTemplate}
-        onClose={handleCloseTemplate}
+        <Dialog
+        open={openViewTemplate}
+        onClose={() => setOpenViewTemplate(false)}
         maxWidth="xl"
         fullWidth
         fullScreen
       >
-        <DialogTitle sx={{
-          bgcolor: alpha(theme.palette.primary.main, 0.08),
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-        }}>
-          Syllabus Template
-          <Button
-            onClick={handleCloseTemplate}
-            sx={{ position: 'absolute', right: 8, top: 8 }}
+          <DialogTitle
+            sx={{
+              bgcolor: alpha(theme.palette.primary.main, 0.08),
+              borderBottom: '1px solid',
+              borderColor: 'divider',
+            }}
           >
-            Close
-          </Button>
-        </DialogTitle>
-        <DialogContent sx={{ p: 0 }}>
-          {selectedSyllabus && (
-            <SyllabusTemplate
-              syllabus={selectedSyllabus}
-              onClose={handleCloseTemplate}
-              mode="view"
-            />
-          )}
-        </DialogContent>
+            Syllabus Template for {selectedSyllabus ? subjects.find(s => s.id === selectedSyllabus.subject_id)?.name : ''}
+            <Button
+              onClick={() => setOpenViewTemplate(false)}
+              sx={{ position: 'absolute', right: 8, top: 8 }}
+            >
+              Close
+            </Button>
+          </DialogTitle>
+          <DialogContent sx={{ p: 0 }}>
+            {selectedSyllabus && (
+              <SyllabusTemplate
+                syllabus={selectedSyllabus}
+                onClose={handleCloseTemplate}
+              />
+            )}
+          </DialogContent>
       </Dialog>
     </Box>
   );

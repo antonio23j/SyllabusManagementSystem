@@ -4,7 +4,7 @@ import {
   List, ListItem, ListItemText, TextField, Box, Select, MenuItem,
   FormControl, InputLabel, Grid, Dialog, DialogTitle, DialogContent,
   DialogActions, Chip, Avatar, Accordion, AccordionSummary, AccordionDetails,
-  IconButton, Paper
+  IconButton, Paper, CircularProgress
 } from '@mui/material';
 import { useForm, Controller } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
@@ -17,6 +17,8 @@ import { ColorModeContext } from '../App';
 import { getStatusColor } from '../theme';
 import api from '../services/api';
 import SyllabusTemplate from '../components/SyllabusTemplate';
+import {useSnackbar} from "../services/SnacbarService";
+
 
 const TeacherDashboard = () => {
   const navigate = useNavigate();
@@ -31,7 +33,9 @@ const TeacherDashboard = () => {
   const [openVersion, setOpenVersion] = useState(false);
   const [openTemplate, setOpenTemplate] = useState(false);
   const [openViewTemplate, setOpenViewTemplate] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const { control, handleSubmit, reset } = useForm();
+  const { show } = useSnackbar();
 
   useEffect(() => {
     fetchSubjects();
@@ -39,12 +43,12 @@ const TeacherDashboard = () => {
   }, []);
 
   const fetchSubjects = async () => {
-    const response = await api.get('/subjects/my', { params: { skip: 0, limit: 1000 } });
+    const response = await api.get('/subjects/my');
     setSubjects(response.data);
   };
 
   const fetchSyllabi = async () => {
-    const response = await api.get('/syllabi/my', { params: { skip: 0, limit: 1000 } });
+    const response = await api.get('/syllabi/my');
     setSyllabi(response.data);
   };
 
@@ -56,7 +60,7 @@ const TeacherDashboard = () => {
 
   const handleTemplateSave = async (templateData) => {
     if (!selectedSubject) {
-      alert('Please select a subject first');
+      show('Please select a subject first', 'error');
       return;
     }
 
@@ -67,13 +71,15 @@ const TeacherDashboard = () => {
     };
 
     try {
+      // use trailing slash to avoid backend redirect which can drop auth headers
       await api.post('/syllabi', syllabusData);
-      alert('Syllabus created successfully');
+      show('Syllabus created successfully', 'success');
       setOpenTemplate(false);
       fetchSyllabi();
     } catch (error) {
       console.error('Error creating syllabus:', error);
-      alert('Error creating syllabus');
+      const serverMsg = error?.response?.data?.detail || error?.response?.data || error.message;
+      show(`Error creating syllabus: ${serverMsg}`, 'error');
     }
   };
 
@@ -83,11 +89,17 @@ const TeacherDashboard = () => {
       template_data: data,
       status: 'draft'
     };
-    await api.post('/syllabi', versionData);
-    alert('New syllabus version created successfully');
-    reset();
-    setOpenVersion(false);
-    fetchSyllabi();
+    try {
+      await api.post('/syllabi', versionData);
+      show('New syllabus version created successfully', 'success');
+      reset();
+      setOpenVersion(false);
+      fetchSyllabi();
+    } catch (error) {
+      console.error('Error creating syllabus version:', error);
+      const serverMsg = error?.response?.data?.detail || error?.response?.data || error.message;
+      show(`Error creating version: ${serverMsg}`, 'error');
+    }
   };
 
   return (
@@ -131,7 +143,7 @@ const TeacherDashboard = () => {
                   Teacher Dashboard
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Manage your syllabi and course content
+                  Manage your syllabus and course content
                 </Typography>
               </Box>
             </Box>
@@ -224,14 +236,14 @@ const TeacherDashboard = () => {
                   </Typography>
                 </Box>
                 <Typography variant="h6" gutterBottom>
-                  My Syllabi
+                  My Syllabus
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Syllabi you've created
+                  Syllabus you've created
                 </Typography>
-                {syllabi.length === 0 ? (
+                  {syllabi.length === 0 ? (
                   <Typography variant="body2" color="text.secondary">
-                    No syllabi created yet
+                    No syllabus created yet
                   </Typography>
                 ) : (
                   <List dense sx={{ maxHeight: 100, overflow: 'auto' }}>
@@ -344,7 +356,6 @@ const TeacherDashboard = () => {
                         variant="outlined"
                         size="small"
                         onClick={() => {
-                          console.log('View Template clicked for:', syllabus);
                           setSelectedSyllabus(syllabus);
                           setOpenViewTemplate(true);
                         }}
@@ -357,13 +368,18 @@ const TeacherDashboard = () => {
                         size="small"
                         color="primary"
                         onClick={() => {
+                          // preserve existing behavior, but show visual feedback
                           setSelectedSyllabus(syllabus);
+                          setDownloading(true);
                           setOpenViewTemplate(true);
+                          // short visual feedback without changing logic
+                          setTimeout(() => setDownloading(false), 900);
                         }}
                         startIcon={<PictureAsPdf />}
                         sx={{ borderRadius: 2 }}
+                        disabled={downloading}
                       >
-                        Download PDF
+                        {downloading ? <CircularProgress size={18} color="inherit" /> : 'Download PDF'}
                       </Button>
                       <Button
                         variant="outlined"

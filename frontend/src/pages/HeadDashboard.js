@@ -41,6 +41,7 @@ import { ColorModeContext } from '../App';
 import { getStatusColor } from '../theme';
 import api, { formatTeacherName } from '../services/api';
 import SyllabusTemplate from '../components/SyllabusTemplate';
+import {useSnackbar} from "../services/SnacbarService";
 
 const HeadDashboard = () => {
   const navigate = useNavigate();
@@ -54,11 +55,12 @@ const HeadDashboard = () => {
   const [showTemplate, setShowTemplate] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const { show } = useSnackbar();
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     if (!user || user.role !== 'head') {
-      alert('Access denied. Department Head privileges required.');
+      show('Access denied. Department Head privileges required.', 'error');
       navigate('/login');
       return;
     }
@@ -69,8 +71,8 @@ const HeadDashboard = () => {
     setLoading(true);
     try {
       const [pendingRes, allRes] = await Promise.all([
-        api.get('/syllabi/pending', { params: { skip: 0, limit: 1000 } }),
-        api.get('/syllabi/all', { params: { skip: 0, limit: 1000 } }),
+        api.get('/syllabi/pending'),
+        api.get('/syllabi/all'),
       ]);
       setSyllabi(pendingRes.data);
       setAllSyllabi(allRes.data);
@@ -85,12 +87,12 @@ const HeadDashboard = () => {
       await api.put(`/syllabi/${id}/status`, { status, reason });
       fetchData();
       if (status === 'approved') {
-        alert('Syllabus approved successfully!');
+        show('Syllabus approved successfully!', 'success');
       } else {
-        alert('Syllabus rejected.');
+        show('Syllabus rejected.', 'error');
       }
     } catch (error) {
-      alert('Failed to update status');
+      show('Failed to update status', 'error');
     }
     setShowRejectDialog(false);
     setRejectReason('');
@@ -108,9 +110,9 @@ const HeadDashboard = () => {
   const rejectedCount = allSyllabi.filter(s => s.status === 'rejected').length;
 
   const statCards = [
-    { title: 'Pending Review', count: pendingSyllabi.length, icon: HourglassEmpty, color: 'warning', desc: 'Syllabi awaiting your review' },
-    { title: 'Approved', count: approvedCount, icon: ThumbUp, color: 'success', desc: 'Syllabi you\'ve approved' },
-    { title: 'Rejected', count: rejectedCount, icon: ThumbDown, color: 'error', desc: 'Syllabi you\'ve rejected' },
+    { title: 'Pending Review', count: pendingSyllabi.length, icon: HourglassEmpty, color: 'warning', desc: 'Syllabus awaiting your review' },
+    { title: 'Approved', count: approvedCount, icon: ThumbUp, color: 'success', desc: 'Syllabus you\'ve approved' },
+    { title: 'Rejected', count: rejectedCount, icon: ThumbDown, color: 'error', desc: 'Syllabus you\'ve rejected' },
   ];
 
   return (
@@ -207,12 +209,12 @@ const HeadDashboard = () => {
           ))}
         </Grid>
 
-        {/* Pending Syllabi Section */}
+        {/* Pending Syllabus Section */}
         <Card sx={{ mb: 4 }}>
           <CardContent>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
               <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                Pending Syllabi for Review
+                Pending Syllabus for Review
               </Typography>
               <Chip label={pendingSyllabi.length} color="warning" size="small" />
             </Box>
@@ -223,7 +225,7 @@ const HeadDashboard = () => {
               </Box>
             ) : pendingSyllabi.length === 0 ? (
               <Alert severity="info" sx={{ borderRadius: 2 }}>
-                No syllabi pending review at this time. Great job staying on top of reviews!
+                No syllabus pending review at this time. Great job staying on top of reviews!
               </Alert>
             ) : (
               <List disablePadding>

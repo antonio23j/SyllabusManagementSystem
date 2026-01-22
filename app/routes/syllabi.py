@@ -11,7 +11,14 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.units import inch
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from reportlab.pdfgen import canvas
+from reportlab.lib import colors
+from reportlab.lib.colors import HexColor
 from io import BytesIO
+import textwrap
+import os
 import json
 
 class SyllabusCreate(BaseModel):
@@ -166,6 +173,417 @@ def update_syllabus(syllabus_id: int, syllabus: SyllabusUpdate, db: Session = De
     db.refresh(db_syllabus)
     return db_syllabus
 
+def generate_english_syllabus_pdf(syllabus, template_data):
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    margin = 20 * mm
+    y_pos = height - margin
+
+    table_width = width - (2 * margin)
+    first_col_width = 65 * mm
+    remaining_width = table_width - first_col_width
+    light_blue = HexColor('#3498db')
+    dark_blue = HexColor('#1a237e')
+    black = HexColor('#000000')
+
+    def draw_footer(canvas_obj):
+        canvas_obj.saveState()
+        canvas_obj.setFillAlpha(0.4)  # Set opacity to 40%
+        canvas_obj.setFillColor(black)
+        canvas_obj.setFont('Helvetica', 7)
+        footer_text = "Adresa: Bulevardi “ Zogu I “, Nr. 25/1, Tiranë, Tel. & Fax: +355 4 2229590. www.fshn.edu.al"
+        canvas_obj.drawCentredString(width / 2, 10 * mm, footer_text)
+        canvas_obj.restoreState()
+
+    def get_typology_string(typ):
+        """Map typology codes to descriptions [cite: 3]"""
+        mapping = {
+            'A': 'Basic', 'B': 'Intermediate', 'C': 'Advanced',
+            'D': 'Specialized', 'E': 'Research', 'F': 'Practical'
+        }
+        return f"{typ} - {mapping.get(typ, '')}"
+
+    def draw_dynamic_row(y, cells, bold_first=False, is_header=False):
+        """Calculates row height dynamically based on the longest wrapped text"""
+        num_cols = len(cells)
+        other_col_width = remaining_width / max((num_cols - 1), 1)
+
+        # 1. Wrap text and determine required height
+        wrapped_cells = []
+        max_lines = 1
+        for i, text in enumerate(cells):
+            curr_w = first_col_width if i == 0 else other_col_width
+            # Font size 8.5pt needs roughly 1.8 units per character
+            chars_per_line = int(curr_w / 1.7)
+            lines = textwrap.wrap(str(text if text else ""), width=chars_per_line)
+            wrapped_cells.append(lines)
+            max_lines = max(max_lines, len(lines))
+
+        # Calculate dynamic height (4mm per line + padding)
+        row_h = max(10 * mm, (max_lines * 4 * mm) + 3 * mm)
+
+        # Handle Page Breaks
+        if y - row_h < 25 * mm:
+            c.showPage()
+            y = height - margin
+            draw_footer(c)
+
+        # 2. Draw Row
+        curr_x = margin
+        for i, lines in enumerate(wrapped_cells):
+            curr_w = first_col_width if i == 0 else other_col_width
+            c.setLineWidth(0.5)
+            c.rect(curr_x, y - row_h, curr_w, row_h)
+
+            # Text Styling
+            if i == 0:
+                c.setFillColor(light_blue)  # Light blue text for the first cell
+                c.setFont('Helvetica-Bold' if bold_first else 'Helvetica', 8.5)
+            else:
+                c.setFillColor(HexColor('#000000'))
+                c.setFont('Helvetica-Bold' if is_header else 'Helvetica', 8.5)
+
+            # Draw each line inside the cell
+            text_y = y - 5 * mm
+            for line in lines:
+                c.drawString(curr_x + 2 * mm, text_y, line)
+                text_y -= 4 * mm
+
+            curr_x += curr_w
+
+        c.setFillColor(HexColor('#000000'))  # Reset color
+        return y - row_h
+
+    # === HEADER: CENTERED LOGO ===
+    current_script_dir = os.path.dirname(__file__)
+    logo_path = os.path.join(current_script_dir, 'universiteti-i-tiranes-logo.jpg')
+
+    print("Logo path:", logo_path)
+    if os.path.exists(logo_path):
+        img_width = 30 * mm
+        img_height = 20 * mm
+
+        c.drawImage(
+            logo_path,
+            (width - img_width) / 2,
+            y_pos - img_height,
+            width=img_width,
+            height=img_height,
+            preserveAspectRatio=True,
+            mask='auto'
+        )
+
+        y_pos -= img_height + 5 * mm
+    else:
+        y_pos -= 10 * mm
+
+    # === TITLES [cite: 1, 2] ===
+    c.setFillColor(dark_blue)
+    c.setFont('Helvetica-Bold', 12)
+    c.drawCentredString(width / 2, y_pos, syllabus.subject.department.name)
+    y_pos -= 7 * mm
+    c.drawCentredString(width / 2, y_pos, 'SUBJECT PROGRAM:')
+    y_pos -= 10 * mm
+
+    # === TABLE 1 [cite: 3] ===
+    headers = ['Subject activity', 'Lectures', 'Exercises', 'Laboratories', 'Practice', 'Total']
+    y_pos = draw_dynamic_row(y_pos, headers, bold_first=True, is_header=True)
+
+    typ_val = template_data.get('typology', 'B')
+    rows = [
+        ['Student duties', 'Not compulsory', '75%', '100%', '100%', ''],
+        ['Class hours', '30', '15', '30', '', '75'],
+        ['Individual studies', '75'],
+        ['Lesson language', 'Anglisht'],
+        ['Evaluation forms (ESE/TSE)', 'TSE'],
+        ['Subject typology / Type of the subject/ Subject code',
+         f"{get_typology_string(typ_val)} / {template_data.get('type', '')} / {template_data.get('courseCode', '')}"],
+        ['Ethical code', 'Referred to Ethical code of UT, approved by Decision No. 12, date 18.04.2011'],
+        ['Exam form', 'Written'],
+        ['Credits', {template_data.get('credits', '5')}],
+        ['Lesson form',
+         f"Viti {template_data.get('year', 'I')}, Sem {template_data.get('semester', 'II')}, {template_data.get('schedule', '')}"],
+    ]
+
+    for row in rows:
+        y_pos = draw_dynamic_row(y_pos, row)
+
+    # === GRADING [cite: 3] ===
+    y_pos = draw_dynamic_row(y_pos, ['End Semester Evaluation (ESE)', template_data.get('semesterEvaluation', '')], bold_first=True,
+                             is_header=True)
+    grading = [
+        ['', 'Presence and active participation', f"{template_data.get('otherPercent', '0')}%"],
+        ['', 'Midterm control', f"{template_data.get('midtermPercent', '0')}%"],
+        ['', 'Projects', f"{template_data.get('assignmentsPercent', '0')}%"],
+        ['', 'Final exam', f"{template_data.get('finalPercent', '0')}%"],
+        ['', 'Total', '100%']
+    ]
+    for g_row in grading:
+        y_pos = draw_dynamic_row(y_pos, g_row)
+
+    y_pos = draw_dynamic_row(y_pos, ['Subject Representative', f"Prof. Dr., {template_data.get('instructor', '')}"],
+                             bold_first=True)
+
+    # === PAGE 2 SECTIONS [cite: 4] ===
+    c.showPage()
+    y_pos = height - margin
+    draw_footer(c)
+
+    sections = [
+        ('Basic concepts', template_data.get('additionalDescription', '')),
+        ('Objectives', template_data.get('learningObjectives', '')),
+        ('Foreknowledge', template_data.get('prerequisites', '')),
+        ('Skills given', 'Aftësi analitike në fushën e lëndës.'),
+        ('Topics of the Lectures', template_data.get('lectureTopics', '')),
+        ('Literature', f"Tekste bazë: {template_data.get('textbooks', '')}")
+    ]
+
+    for title, content in sections:
+        # These now expand in height if the content is long
+        y_pos = draw_dynamic_row(y_pos, [title, content], bold_first=True)
+
+    # === SIGNATURES [cite: 5, 6] ===
+    y_pos -= 20 * mm
+    c.setFont('Helvetica-Bold', 9)
+    c.drawString(margin, y_pos, 'Subject Representative')
+    c.drawString(width - margin - 55 * mm, y_pos, 'Head of Department')
+    y_pos -= 6 * mm
+    c.setFont('Helvetica', 9)
+    c.drawString(margin, y_pos, f"Prof. Dr. {template_data.get('instructor', 'Ana Ktona')}")
+
+    draw_footer(c)
+
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+def generate_albanian_syllabus_pdf(syllabus, template_data):
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    margin = 20 * mm
+    y_pos = height - margin
+
+    table_width = width - (2 * margin)
+    first_col_width = 65 * mm
+    remaining_width = table_width - first_col_width
+    light_blue = HexColor('#3498db')
+    dark_blue = HexColor('#1a237e')
+    black = HexColor('#000000')
+
+    def draw_footer(canvas_obj):
+        canvas_obj.saveState()
+        canvas_obj.setFillAlpha(0.4)  # Set opacity to 40%
+        canvas_obj.setFillColor(black)
+        canvas_obj.setFont('Helvetica', 7)
+        footer_text = "Adresa: Bulevardi “ Zogu I “, Nr. 25/1, Tiranë, Tel. & Fax: +355 4 2229590. www.fshn.edu.al"
+        canvas_obj.drawCentredString(width / 2, 10 * mm, footer_text)
+        canvas_obj.restoreState()
+
+    def get_typology_string(typ):
+        """Map typology codes to descriptions [cite: 3]"""
+        mapping = {
+            'A': 'Basic', 'B': 'Intermediate', 'C': 'Advanced',
+            'D': 'Specialized', 'E': 'Research', 'F': 'Practical'
+        }
+        return f"{typ} - {mapping.get(typ, '')}"
+
+    def draw_dynamic_row(y, cells, bold_first=False, is_header=False):
+        """Calculates row height dynamically based on the longest wrapped text"""
+        num_cols = len(cells)
+        other_col_width = remaining_width / max((num_cols - 1), 1)
+
+        # 1. Wrap text and determine required height
+        wrapped_cells = []
+        max_lines = 1
+        for i, text in enumerate(cells):
+            curr_w = first_col_width if i == 0 else other_col_width
+            # Font size 8.5pt needs roughly 1.8 units per character
+            chars_per_line = int(curr_w / 1.7)
+            lines = textwrap.wrap(str(text if text else ""), width=chars_per_line)
+            wrapped_cells.append(lines)
+            max_lines = max(max_lines, len(lines))
+
+        # Calculate dynamic height (4mm per line + padding)
+        row_h = max(10 * mm, (max_lines * 4 * mm) + 3 * mm)
+
+        # Handle Page Breaks
+        if y - row_h < 25 * mm:
+            draw_footer(c)
+            c.showPage()
+            y = height - margin
+
+        curr_x = margin
+        for i, lines in enumerate(wrapped_cells):
+            curr_w = first_col_width if i == 0 else other_col_width
+            c.setLineWidth(0.5)
+            c.rect(curr_x, y - row_h, curr_w, row_h)
+
+            # Text Styling
+            if i == 0:
+                c.setFillColor(light_blue)  # Light blue text for the first cell
+                c.setFont('Helvetica-Bold' if bold_first else 'Helvetica', 8.5)
+            else:
+                c.setFillColor(HexColor('#000000'))
+                c.setFont('Helvetica-Bold' if is_header else 'Helvetica', 8.5)
+
+            # Draw each line inside the cell
+            text_y = y - 5 * mm
+            for line in lines:
+                c.drawString(curr_x + 2 * mm, text_y, line)
+                text_y -= 4 * mm
+
+            curr_x += curr_w
+
+        c.setFillColor(HexColor('#000000'))  # Reset color
+        return y - row_h
+
+    # === HEADER: CENTERED LOGO ===
+    current_script_dir = os.path.dirname(__file__)
+    logo_path = os.path.join(current_script_dir, 'universiteti-i-tiranes-logo.jpg')
+
+    print("Logo path:", logo_path)
+    if os.path.exists(logo_path):
+        img_width = 30 * mm
+        img_height = 20 * mm
+
+        c.drawImage(
+            logo_path,
+            (width - img_width) / 2,
+            y_pos - img_height,
+            width=img_width,
+            height=img_height,
+            preserveAspectRatio=True,
+            mask='auto'
+        )
+
+        y_pos -= img_height + 5 * mm
+    else:
+        y_pos -= 10 * mm
+
+    # === TITLES [cite: 1, 2] ===
+    c.setFillColor(dark_blue)
+    c.setFont('Helvetica-Bold', 12)
+    c.drawCentredString(width / 2, y_pos, syllabus.subject.department.name)
+    y_pos -= 7 * mm
+    c.drawCentredString(width / 2, y_pos, 'PROGRAMI I LËNDËS:')
+    y_pos -= 10 * mm
+
+    # === TABLE 1 [cite: 3] ===
+    headers = ['Aktiviteti mësimor', 'Leksione', 'Ushtrime', 'Laboratore', 'Praktike', 'Totale']
+    y_pos = draw_dynamic_row(y_pos, headers, bold_first=True, is_header=True)
+
+    typ_val = template_data.get('typology', 'B')
+    rows = [
+        ['Detyrimi i studentit', 'Jo të detyrueshëm', '75%', '100%', '100%', ''],
+        ['Orë mesimore', ''],
+        ['Studim individuale', ''],
+        ['Gjuha e zhvillimit të mësimit', 'Anglisht'],
+        ['Tipologjia / Lloji / Kodi',
+         f"{get_typology_string(typ_val)} / {template_data.get('type', '')} / {template_data.get('courseCode', '')}"],
+        ['Kodi i etikës', 'Referuar Kodit të etikës së UT'],
+        ['Mënyra e shlyerjes', 'Provim'],
+        ['Kredite', {template_data.get('credits', '5')}],
+        ['Zhvillimi i Mësimit',
+         f"Viti {template_data.get('year', 'I')}, Sem {template_data.get('semester', 'II')}, {template_data.get('schedule', '')}"],
+        ['Zhvillimi i Provimit', template_data.get('gradingPolicy', '')]
+    ]
+
+    for row in rows:
+        y_pos = draw_dynamic_row(y_pos, row)
+
+    # === GRADING [cite: 3] ===
+    y_pos = draw_dynamic_row(y_pos, ['Vlerësimi, Nota, Provim', 'Elementet', 'Përqindja'], bold_first=True,
+                             is_header=True)
+    grading = [
+        ['', 'Pjesëmarrja dhe aktivizimi', f"{template_data.get('otherPercent', '0')}%"],
+        ['', 'Kontrolle të ndërmjetme', f"{template_data.get('midtermPercent', '0')}%"],
+        ['', 'Detyra kursi', f"{template_data.get('assignmentsPercent', '0')}%"],
+        ['', 'Provimit final', f"{template_data.get('finalPercent', '0')}%"],
+        ['', 'Gjithsej', '100%']
+    ]
+    for g_row in grading:
+        y_pos = draw_dynamic_row(y_pos, g_row)
+
+    y_pos = draw_dynamic_row(y_pos, ['Përgjegjësi i lëndës', f"Prof. Dr., {template_data.get('instructor', '')}"],
+                             bold_first=True)
+
+    draw_footer(c)
+
+    # === PAGE 2 SECTIONS [cite: 4] ===
+    c.showPage()
+    y_pos = height - margin
+
+    sections = [
+        ('Konceptet themelore', template_data.get('additionalDescription', '')),
+        ('Objektivat', template_data.get('learningObjectives', '')),
+        ('Njohuritë paraprake', template_data.get('prerequisites', '')),
+        ('Aftësitë e studentit', 'Aftësi analitike në fushën e lëndës.'),
+        ('Tematika e Leksioneve', template_data.get('lectureTopics', '')),
+        ('Literatura', f"Tekste bazë: {template_data.get('textbooks', '')}")
+    ]
+
+    for title, content in sections:
+        # These now expand in height if the content is long
+        y_pos = draw_dynamic_row(y_pos, [title, content], bold_first=True)
+
+    # === SIGNATURES [cite: 5, 6] ===
+    y_pos -= 20 * mm
+    c.setFont('Helvetica-Bold', 9)
+    c.drawString(margin, y_pos, 'Titullari i lëndës')
+    c.drawString(width - margin - 55 * mm, y_pos, 'Përgjegjësi i Departamentit')
+    y_pos -= 6 * mm
+    c.setFont('Helvetica', 9)
+    c.drawString(margin, y_pos, f"Prof. Dr. {template_data.get('instructor', 'Ana Ktona')}")
+
+    draw_footer(c)
+
+    c.save()
+    buffer.seek(0)
+    return buffer
+@router.post("/{syllabus_id}/pdf")
+def download_syllabus_pdf(
+    syllabus_id: int,
+    request_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Check authorization
+    syllabus = db.query(Syllabus).filter(Syllabus.id == syllabus_id).first()
+    if not syllabus:
+        raise HTTPException(status_code=404, detail="Syllabus not found")
+
+    if current_user.role not in ["admin"]:
+        if current_user.role == "teacher" and syllabus.teacher_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        elif current_user.role == "head":
+            from app.models.models import Department
+            dept = db.query(Department).filter(Department.head_id == current_user.id).first()
+            if not dept or syllabus.subject.department_id != dept.id:
+                raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Get template data
+    template_data = request_data.get('template_data', {})
+
+    # Generate Albanian format PDF
+    language = template_data.get('language', 'AL')
+    print('language', language)
+
+    if language == 'EN':
+        pdf_buffer = generate_english_syllabus_pdf(syllabus, template_data)
+    else:
+        pdf_buffer = generate_albanian_syllabus_pdf(syllabus, template_data)
+
+    # Create filename
+    course_code = template_data.get('courseCode', 'template')
+    filename = f"syllabus-{course_code}.pdf"
+
+    return StreamingResponse(
+        pdf_buffer,
+        media_type='application/pdf',
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 @router.delete("/{syllabus_id}")
 def delete_syllabus(syllabus_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if current_user.role != "admin":
@@ -183,158 +601,4 @@ def delete_syllabus(syllabus_id: int, db: Session = Depends(get_db), current_use
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to delete syllabus: {str(e)}")
 
-@router.get("/{syllabus_id}/pdf")
-def download_syllabus_pdf(syllabus_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # Check if user can access this syllabus
-    syllabus = db.query(Syllabus).filter(Syllabus.id == syllabus_id).first()
-    if not syllabus:
-        raise HTTPException(status_code=404, detail="Syllabus not found")
 
-    # Allow access if user is teacher of the syllabus, admin, or head of department
-    if current_user.role not in ["admin"]:
-        if current_user.role == "teacher" and syllabus.teacher_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Not authorized")
-        elif current_user.role == "head":
-            from app.models.models import Department
-            dept = db.query(Department).filter(Department.head_id == current_user.id).first()
-            if not dept or syllabus.subject.department_id != dept.id:
-                raise HTTPException(status_code=403, detail="Not authorized")
-
-    # Generate PDF
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter)
-    styles = getSampleStyleSheet()
-
-    # Custom styles
-    title_style = ParagraphStyle(
-        'Title',
-        parent=styles['Heading1'],
-        fontSize=18,
-        spaceAfter=30,
-        alignment=1  # Center alignment
-    )
-
-    heading_style = ParagraphStyle(
-        'Heading',
-        parent=styles['Heading2'],
-        fontSize=14,
-        spaceAfter=12
-    )
-
-    content_style = styles['Normal']
-
-    story = []
-
-    # Get template data
-    template_data = syllabus.template_data or {}
-
-    # Title
-    course_title = template_data.get('courseTitle', 'Course Title')
-    course_code = template_data.get('courseCode', 'Course Code')
-    story.append(Paragraph(f"{course_title}<br/>{course_code}", title_style))
-    story.append(Spacer(1, 12))
-
-    # Instructor Info
-    instructor = template_data.get('instructor', 'Instructor Name')
-    email = template_data.get('email', '')
-    office_hours = template_data.get('officeHours', '')
-
-    story.append(Paragraph("Instructor Information", heading_style))
-    story.append(Paragraph(f"<b>Name:</b> {instructor}", content_style))
-    if email:
-        story.append(Paragraph(f"<b>Email:</b> {email}", content_style))
-    if office_hours:
-        story.append(Paragraph(f"<b>Office Hours:</b> {office_hours}", content_style))
-    story.append(Spacer(1, 12))
-
-    # Subject Information
-    typology = template_data.get('typology', '')
-    subject_type = template_data.get('type', '')
-    if typology or subject_type:
-        story.append(Paragraph("Subject Information", heading_style))
-        if typology:
-            typology_descriptions = {
-                'A': 'Basic',
-                'B': 'Intermediate',
-                'C': 'Advanced',
-                'D': 'Specialized',
-                'E': 'Research',
-                'F': 'Practical'
-            }
-            typology_desc = typology_descriptions.get(typology, '')
-            story.append(Paragraph(f"<b>Typology:</b> {typology} - {typology_desc}", content_style))
-        if subject_type:
-            story.append(Paragraph(f"<b>Type:</b> {subject_type.title()}", content_style))
-        story.append(Spacer(1, 12))
-
-    # Course Description
-    course_description = template_data.get('courseDescription', '')
-    if course_description:
-        story.append(Paragraph("Course Description", heading_style))
-        story.append(Paragraph(course_description, content_style))
-        story.append(Spacer(1, 12))
-
-    # Learning Objectives
-    learning_objectives = template_data.get('learningObjectives', '')
-    if learning_objectives:
-        story.append(Paragraph("Learning Objectives", heading_style))
-        story.append(Paragraph(learning_objectives, content_style))
-        story.append(Spacer(1, 12))
-
-    # Prerequisites
-    prerequisites = template_data.get('prerequisites', '')
-    if prerequisites:
-        story.append(Paragraph("Prerequisites", heading_style))
-        story.append(Paragraph(prerequisites, content_style))
-        story.append(Spacer(1, 12))
-
-    # Required Materials
-    textbooks = template_data.get('textbooks', '')
-    if textbooks:
-        story.append(Paragraph("Required Materials", heading_style))
-        story.append(Paragraph(textbooks, content_style))
-        story.append(Spacer(1, 12))
-
-    # Grading Policy
-    grading_policy = template_data.get('gradingPolicy', '')
-    if grading_policy:
-        story.append(Paragraph("Grading Policy", heading_style))
-        story.append(Paragraph(grading_policy, content_style))
-        story.append(Spacer(1, 12))
-
-    # Course Policies
-    attendance_policy = template_data.get('attendancePolicy', '')
-    academic_integrity = template_data.get('academicIntegrity', '')
-
-    if attendance_policy or academic_integrity:
-        story.append(Paragraph("Course Policies", heading_style))
-        if attendance_policy:
-            story.append(Paragraph(f"<b>Attendance:</b> {attendance_policy}", content_style))
-        if academic_integrity:
-            story.append(Paragraph(f"<b>Academic Integrity:</b> {academic_integrity}", content_style))
-        story.append(Spacer(1, 12))
-
-    # Schedule
-    schedule = template_data.get('schedule', '')
-    if schedule:
-        story.append(Paragraph("Course Schedule", heading_style))
-        story.append(Paragraph(schedule.replace('\n', '<br/>'), content_style))
-        story.append(Spacer(1, 12))
-
-    # Footer
-    from datetime import datetime
-    story.append(Spacer(1, 24))
-    story.append(Paragraph(f"This syllabus is subject to change at the instructor's discretion.<br/>Last updated: {datetime.now().strftime('%Y-%m-%d')}", styles['Italic']))
-
-    # Build PDF
-    doc.build(story)
-
-    buffer.seek(0)
-
-    # Return PDF as streaming response
-    filename = f"syllabus-{course_code or 'template'}.pdf"
-    return StreamingResponse(
-        buffer,
-        media_type='application/pdf',
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
-    )
